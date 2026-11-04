@@ -1,0 +1,23 @@
+name: voicebrew
+description: Standalone text-to-speech reader with device voices and API MP3 export.
+publish_to: none
+version: 1.0.0+1
+environment:
+  sdk: ^3.12.2
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_tts: ^4.2.5
+  file_picker: ^13.2.0
+  pdfrx: ^2.4.8
+  archive: ^4.5.2
+  xml: ^7.0.1
+  html: ^0.15.7
+  http: ^1.6.0
+  just_audio: ^0.10.6
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true
