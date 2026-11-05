@@ -1,16 +1,17 @@
+# Canonical icon configuration; the artwork fills the platform mask.
 flutter_launcher_icons:
   image_path: "assets/branding/app_icon.png"
   android: true
-  adaptive_icon_background: "#000000"
+  adaptive_icon_background: "#009DC4"
   adaptive_icon_foreground: "assets/branding/app_icon.png"
-  adaptive_icon_foreground_inset: 16
+  adaptive_icon_foreground_inset: 12
   ios: false
   remove_alpha_ios: true
   web:
     generate: true
     image_path: "assets/branding/app_icon.png"
-    background_color: "#210653"
-    theme_color: "#210653"
+    background_color: "#009DC4"
+    theme_color: "#009DC4"
   windows:
     generate: false
     icon_size: 256
