@@ -1,4 +1,4 @@
-<!-- BEGIN brew-shared (synced from ~/Desktop/code/brew/AGENTS.md by sync-agent-rules.sh; do not edit here) -->
+<!-- BEGIN brew-shared (synced from ~/Desktop/code/bufferbrew/brewapps/AGENTS.md by sync-agent-rules.sh; do not edit here) -->
 
 # Brew ecosystem — shared agent rules
 
@@ -8,14 +8,14 @@ any Brew repo. App-specific rules live in that repo's own `CLAUDE.md` /
 `AGENTS.md` below the shared block; where the two conflict, the app's own
 rules win for that app.
 
-Canonical source: `~/Desktop/code/brew/AGENTS.md`. Each repo carries a synced
+Canonical source: `~/Desktop/code/bufferbrew/brewapps/AGENTS.md`. Each repo carries a synced
 copy between `brew-shared` markers — edit the canonical file, then run
-`~/Desktop/code/brew/sync-agent-rules.sh`. Never edit the synced block in place.
+`~/Desktop/code/bufferbrew/brewapps/sync-agent-rules.sh`. Never edit the synced block in place.
 
 ## Members
 
-Brew apps live under `~/Desktop/code/bufferbrew/`, one git repo per folder:
-BREW, BrewHire, BrewTales, BrewWire, NeuroBrew, WealthBrew, brewfeed.
+Brew apps live under `~/Desktop/code/bufferbrew/brewapps/`, one git repo per folder:
+BREW, BrewHire, BrewTales, BrewVoyage, BrewWire, NeuroBrew, VoiceBrew, WealthBrew, brewfeed.
 BrewSkolar was merged into NeuroBrew and retired (2026-10-05).
 
 Not Brew, whatever older docs say: `craftsman`, `castack`, `WinCtrl`,
@@ -51,7 +51,7 @@ schema.
 - **Never commit `graphify-out/`** — not even as a separate graph commit. If an
   app's own docs say to commit the graph, flag the conflict instead.
 - Shared Flutter code lives in `bufferBrew/brew-packages`
-  (`~/Desktop/code/bufferbrew/packages`, a pub workspace). Only schema-agnostic
+  (`~/Desktop/code/bufferbrew/brewapps/packages`, a pub workspace). Only schema-agnostic
   client code belongs there — HTTP/LLM provider dispatch, Supabase bootstrap,
   auth helpers — never a repository class tied to one app's tables.
 - Apps depend on it by **git dep pinned to the commit SHA of a release tag**,
