@@ -80,3 +80,11 @@ Document parsing, text chunking, MP3 joining, and theme tokens are adapted from
 [bufferBrew/NeuroBrew](https://github.com/bufferBrew/NeuroBrew).
 This repository starts with new history and includes no original environment
 files, deployment configuration, credentials, or user documents.
+
+## App icon
+
+The launcher uses a cyan background (`#009DC4`) and the white Brew cup
+with its app-specific symbol. `assets/branding/app_icon.png` is the full-bleed source;
+`flutter_launcher_icons.yaml` is the canonical generation configuration.
+Android uses an 12% foreground inset to keep the symbol within launcher masks
+without a black tile border. Web manifest colors match the icon background.
