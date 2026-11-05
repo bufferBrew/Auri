@@ -137,6 +137,9 @@ a job lands changes on an app's default branch:
   using the file name already in the folder (`<App>-release.apk` /
   `<App>-debug.apk`).
 - Check it with `apksigner verify`, then overwrite the old file.
+- After a replacement APK passes signature verification, remove stale APKs for
+  that same app from Drive › apk (including superseded debug/release variants).
+  Keep one latest verified APK per app; never remove another app’s APK.
 - Note it on the app's Notion page. Overwriting can change the Drive file id,
   so re-check any Notion link to the file.
 
