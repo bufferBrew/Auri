@@ -1,4 +1,4 @@
-<!-- BEGIN brew-shared (synced from ~/Desktop/code/brew/AGENTS.md by sync-agent-rules.sh; do not edit here) -->
+<!-- BEGIN brew-shared (synced from ~/Desktop/code/bufferbrew/brewapps/AGENTS.md by sync-agent-rules.sh; do not edit here) -->
 
 # Brew ecosystem — shared agent rules
 
@@ -8,14 +8,14 @@ any Brew repo. App-specific rules live in that repo's own `CLAUDE.md` /
 `AGENTS.md` below the shared block; where the two conflict, the app's own
 rules win for that app.
 
-Canonical source: `~/Desktop/code/brew/AGENTS.md`. Each repo carries a synced
+Canonical source: `~/Desktop/code/bufferbrew/brewapps/AGENTS.md`. Each repo carries a synced
 copy between `brew-shared` markers — edit the canonical file, then run
-`~/Desktop/code/brew/sync-agent-rules.sh`. Never edit the synced block in place.
+`~/Desktop/code/bufferbrew/brewapps/sync-agent-rules.sh`. Never edit the synced block in place.
 
 ## Members
 
-Brew apps live under `~/Desktop/code/brew/`, one git repo per folder:
-BREW, BrewHire, BrewTales, BrewWire, NeuroBrew, WealthBrew, brewfeed.
+Brew apps live under `~/Desktop/code/bufferbrew/brewapps/`, one git repo per folder:
+BREW, BrewHire, BrewTales, BrewVoyage, BrewWire, NeuroBrew, VoiceBrew, WealthBrew, brewfeed.
 BrewSkolar was merged into NeuroBrew and retired (2026-10-05).
 
 Not Brew, whatever older docs say: `craftsman`, `castack`, `WinCtrl`,
@@ -51,7 +51,7 @@ schema.
 - **Never commit `graphify-out/`** — not even as a separate graph commit. If an
   app's own docs say to commit the graph, flag the conflict instead.
 - Shared Flutter code lives in `bufferBrew/brew-packages`
-  (`~/Desktop/code/apps/packages`, a pub workspace). Only schema-agnostic
+  (`~/Desktop/code/bufferbrew/brewapps/packages`, a pub workspace). Only schema-agnostic
   client code belongs there — HTTP/LLM provider dispatch, Supabase bootstrap,
   auth helpers — never a repository class tied to one app's tables.
 - Apps depend on it by **git dep pinned to the commit SHA of a release tag**,
@@ -62,7 +62,7 @@ schema.
   to resolve. Get the SHA with
   `git ls-remote https://github.com/bufferBrew/brew-packages.git 'refs/tags/vX.Y.Z^{}'`.
   To develop against a local checkout, add a git-ignored
-  `pubspec_overrides.yaml` pointing at `../../apps/packages/<pkg>` — only
+  `pubspec_overrides.yaml` pointing at `../packages/<pkg>` — only
   while you're editing the package. It rewrites `pubspec.lock` to a `path:`
   source; never commit the lock in that state. Delete the override, tag a
   brew-packages release, bump `ref`, `pub get`, then commit.
@@ -137,6 +137,9 @@ a job lands changes on an app's default branch:
   using the file name already in the folder (`<App>-release.apk` /
   `<App>-debug.apk`).
 - Check it with `apksigner verify`, then overwrite the old file.
+- After a replacement APK passes signature verification, remove stale APKs for
+  that same app from Drive › apk (including superseded debug/release variants).
+  Keep one latest verified APK per app; never remove another app’s APK.
 - Note it on the app's Notion page. Overwriting can change the Drive file id,
   so re-check any Notion link to the file.
 
