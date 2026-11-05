@@ -14,7 +14,7 @@ copy between `brew-shared` markers — edit the canonical file, then run
 
 ## Members
 
-Brew apps live under `~/Desktop/code/brew/`, one git repo per folder:
+Brew apps live under `~/Desktop/code/bufferbrew/`, one git repo per folder:
 BREW, BrewHire, BrewTales, BrewWire, NeuroBrew, WealthBrew, brewfeed.
 BrewSkolar was merged into NeuroBrew and retired (2026-10-05).
 
@@ -51,7 +51,7 @@ schema.
 - **Never commit `graphify-out/`** — not even as a separate graph commit. If an
   app's own docs say to commit the graph, flag the conflict instead.
 - Shared Flutter code lives in `bufferBrew/brew-packages`
-  (`~/Desktop/code/apps/packages`, a pub workspace). Only schema-agnostic
+  (`~/Desktop/code/bufferbrew/packages`, a pub workspace). Only schema-agnostic
   client code belongs there — HTTP/LLM provider dispatch, Supabase bootstrap,
   auth helpers — never a repository class tied to one app's tables.
 - Apps depend on it by **git dep pinned to the commit SHA of a release tag**,
@@ -62,7 +62,7 @@ schema.
   to resolve. Get the SHA with
   `git ls-remote https://github.com/bufferBrew/brew-packages.git 'refs/tags/vX.Y.Z^{}'`.
   To develop against a local checkout, add a git-ignored
-  `pubspec_overrides.yaml` pointing at `../../apps/packages/<pkg>` — only
+  `pubspec_overrides.yaml` pointing at `../packages/<pkg>` — only
   while you're editing the package. It rewrites `pubspec.lock` to a `path:`
   source; never commit the lock in that state. Delete the override, tag a
   brew-packages release, bump `ref`, `pub get`, then commit.
