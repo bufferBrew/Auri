@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voicebrew/features/read_aloud/domain/text_chunk.dart';
+import 'package:voxen/features/read_aloud/domain/text_chunk.dart';
 
 void main() {
   group('chunkText', () {

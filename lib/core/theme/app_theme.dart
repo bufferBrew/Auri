@@ -11,7 +11,7 @@ export 'app_motion.dart';
 export 'app_spacing.dart';
 export 'app_typography.dart';
 
-/// VoiceBrew's theme.
+/// Voxen's theme.
 ///
 /// The real design system lives in the [ThemeExtension]s ([AppColors],
 /// [AppTypography]) — widgets read `context.colors.surface` rather than
@@ -243,7 +243,7 @@ abstract final class AppTheme {
 /// `context.colors.accent`, `context.typography.reading`.
 ///
 /// Falls back to the **dark** token set when no theme extension is installed
-/// (a bare `MaterialApp` in a widget test, say) because dark is VoiceBrew's
+/// (a bare `MaterialApp` in a widget test, say) because dark is Voxen's
 /// primary mode — nothing ever crashes on a missing extension.
 extension AppThemeContext on BuildContext {
   ThemeData get _theme => Theme.of(this);

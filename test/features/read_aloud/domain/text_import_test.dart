@@ -3,8 +3,8 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voicebrew/features/read_aloud/data/file_importer.dart';
-import 'package:voicebrew/features/read_aloud/domain/text_import.dart';
+import 'package:voxen/features/read_aloud/data/file_importer.dart';
+import 'package:voxen/features/read_aloud/domain/text_import.dart';
 
 Uint8List _epub({String title = 'The Book', bool withText = true}) {
   final Archive a = Archive();

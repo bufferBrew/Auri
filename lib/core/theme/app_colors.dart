@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Semantic colour tokens for VoiceBrew.
+/// Semantic colour tokens for Voxen.
 ///
 /// This is the **only** file in the app allowed to contain a raw hex literal.
 /// Widgets and painters read `context.colors.<token>` instead.

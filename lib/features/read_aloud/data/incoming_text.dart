@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Text another Android app sent to VoiceBrew, from its text-selection menu
-/// ("Read with VoiceBrew") or the Share sheet. See `MainActivity.kt`.
+/// Text another Android app sent to Voxen, from its text-selection menu
+/// ("Read with Voxen") or the Share sheet. See `MainActivity.kt`.
 class IncomingText {
   IncomingText({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel('voicebrew/incoming_text');
+    : _channel = channel ?? const MethodChannel('voxen/incoming_text');
 
   final MethodChannel _channel;
 

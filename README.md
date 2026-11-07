@@ -1,4 +1,6 @@
-# VoiceBrew
+# Voxen
+
+Voxen · a Brew app (VoiceBrew until 2026-11-07).
 
 A standalone Flutter text-to-speech app for Android and web, extracted from
 NeuroBrew without changing or removing NeuroBrew's reader.

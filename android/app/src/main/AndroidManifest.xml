@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="VoiceBrew"
+        android:label="Voxen"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -25,13 +25,13 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- "VoiceBrew" in other apps' text-selection menu. -->
-            <intent-filter android:label="Read with VoiceBrew">
+            <!-- "Voxen" in other apps' text-selection menu. -->
+            <intent-filter android:label="Read with Voxen">
                 <action android:name="android.intent.action.PROCESS_TEXT"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="text/plain"/>
             </intent-filter>
-            <!-- VoiceBrew on the Share sheet for plain text. -->
+            <!-- Voxen on the Share sheet for plain text. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
                 <category android:name="android.intent.category.DEFAULT"/>
