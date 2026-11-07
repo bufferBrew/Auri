@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'core/theme/app_theme.dart';
 import 'features/read_aloud/data/file_importer.dart';
+import 'features/read_aloud/data/incoming_text.dart';
 import 'features/read_aloud/domain/text_chunk.dart';
 import 'features/read_aloud/domain/text_import.dart';
 import 'mp3.dart';
@@ -43,6 +44,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   final _key = TextEditingController();
   final _model = TextEditingController(text: 'tts-1');
   final _voice = TextEditingController(text: 'alloy');
+  final _incoming = IncomingText();
   SpeechMode _mode = SpeechMode.device;
   FlutterTts? _tts;
   AudioPlayer? _audio;
@@ -270,7 +272,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
   });
 
   @override
+  void initState() {
+    super.initState();
+    _incoming.listen(_readIncoming);
+  }
+
+  /// Text selected in another app: load it and, with device voices, start
+  /// reading right away. API voices wait for the user, since generating costs
+  /// money and needs a key.
+  Future<void> _readIncoming(String text) async {
+    if (!mounted) return;
+    await _stop(reset: true);
+    if (!mounted) return;
+    setState(() {
+      _title.text = 'Selected text';
+      _text.text = text.trim();
+      _offset = 0;
+      _mp3 = null;
+    });
+    if (_mode == SpeechMode.device) {
+      await _readDevice();
+    } else {
+      _message('Text loaded — generate audio to listen');
+    }
+  }
+
+  @override
   void dispose() {
+    _incoming.dispose();
     _session++;
     _request?.close();
     _tts?.stop();
