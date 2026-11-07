@@ -1,4 +1,4 @@
-name: voicebrew
+name: voxen
 description: Standalone text-to-speech reader with device voices and API MP3 export.
 publish_to: none
 version: 1.0.0+1

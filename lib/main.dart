@@ -13,13 +13,13 @@ import 'features/read_aloud/domain/text_import.dart';
 import 'mp3.dart';
 import 'speech_api.dart';
 
-void main() => runApp(const VoiceBrewApp());
+void main() => runApp(const VoxenApp());
 
-class VoiceBrewApp extends StatelessWidget {
-  const VoiceBrewApp({super.key});
+class VoxenApp extends StatelessWidget {
+  const VoxenApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'VoiceBrew',
+    title: 'Voxen',
     debugShowCheckedModeBanner: false,
     theme: AppTheme.light,
     darkTheme: AppTheme.dark,
@@ -314,7 +314,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('VoiceBrew')),
+      appBar: AppBar(title: const Text('Voxen')),
       body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
@@ -495,7 +495,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 const Text(
-                  'Documents and keys are not saved by VoiceBrew. Export your MP3 before closing.',
+                  'Documents and keys are not saved by Voxen. Export your MP3 before closing.',
                 ),
               ],
             ),

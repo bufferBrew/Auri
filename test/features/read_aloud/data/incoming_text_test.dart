@@ -1,10 +1,10 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voicebrew/features/read_aloud/data/incoming_text.dart';
+import 'package:voxen/features/read_aloud/data/incoming_text.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  const channel = MethodChannel('voicebrew/incoming_text');
+  const channel = MethodChannel('voxen/incoming_text');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 

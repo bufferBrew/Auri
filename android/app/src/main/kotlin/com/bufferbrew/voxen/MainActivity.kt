@@ -1,4 +1,4 @@
-package com.bufferbrew.voicebrew
+package com.bufferbrew.voxen
 
 import android.content.Intent
 import android.os.Bundle
@@ -7,7 +7,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Receives text from other apps (selection menu "Read with VoiceBrew" or the
+ * Receives text from other apps (selection menu "Read with Voxen" or the
  * Share sheet) and hands it to Flutter.
  *
  * Flutter pulls the text with `takeText`, so a cold start can't lose it to a
@@ -58,6 +58,6 @@ class MainActivity : FlutterActivity() {
     }
 
     private companion object {
-        const val CHANNEL = "voicebrew/incoming_text"
+        const val CHANNEL = "voxen/incoming_text"
     }
 }

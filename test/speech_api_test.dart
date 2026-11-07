@@ -3,8 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:voicebrew/speech_api.dart';
-import 'package:voicebrew/mp3.dart';
+import 'package:voxen/speech_api.dart';
+import 'package:voxen/mp3.dart';
 
 void main() {
   Future<Uint8List> generate(

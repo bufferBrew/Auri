@@ -69,7 +69,7 @@ class FileImporter {
           kind: ImportKind.pdf,
         );
       default:
-        throw ImportException('VoiceBrew cannot read .$ext files yet.');
+        throw ImportException('Voxen cannot read .$ext files yet.');
     }
   }
 

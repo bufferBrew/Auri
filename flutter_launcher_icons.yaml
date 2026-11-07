@@ -2,7 +2,7 @@
 flutter_launcher_icons:
   image_path: "assets/branding/app_icon.png"
   android: true
-  adaptive_icon_background: "#009DC4"
+  adaptive_icon_background: "#E8EBF5"
   adaptive_icon_foreground: "assets/branding/app_icon.png"
   adaptive_icon_foreground_inset: 12
   ios: false
@@ -10,8 +10,8 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: "assets/branding/app_icon.png"
-    background_color: "#009DC4"
-    theme_color: "#009DC4"
+    background_color: "#E8EBF5"
+    theme_color: "#E8EBF5"
   windows:
     generate: false
     icon_size: 256

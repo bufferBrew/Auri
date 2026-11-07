@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// The VoiceBrew type scale.
+/// The Voxen type scale.
 ///
 /// System font only — no asset fonts and no webfont package ship with the app.
 /// The identity comes from the scale: tight heavy headings against a

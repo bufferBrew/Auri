@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voicebrew/main.dart';
+import 'package:voxen/main.dart';
 
 void main() {
   testWidgets('defaults to device TTS with no credentials required', (
     tester,
   ) async {
-    await tester.pumpWidget(const VoiceBrewApp());
+    await tester.pumpWidget(const VoxenApp());
     expect(find.text('Device TTS · default'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('Read aloud'),
@@ -28,7 +28,7 @@ void main() {
   testWidgets('API mode exposes key and export, disabled before generation', (
     tester,
   ) async {
-    await tester.pumpWidget(const VoiceBrewApp());
+    await tester.pumpWidget(const VoxenApp());
     await tester.tap(find.byType(DropdownButtonFormField<SpeechMode>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('API voice · MP3 export').last);
