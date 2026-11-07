@@ -133,16 +133,20 @@ job, whatever its size.
 
 ## Latest APKs in Google Drive
 
-Every app with an Android build keeps its latest APK in Google Drive › apk
-(the synced folder `~/Library/CloudStorage/GoogleDrive-…/My Drive/apk`). Whenever
-a job lands changes on an app's default branch:
+Every app with an Android build keeps its latest APK in the one `apk` folder
+at the top of My Drive. On the Mac that is exactly
+`~/Library/CloudStorage/GoogleDrive-<account>/My Drive/apk` (directly under My Drive).
+Never write to a nested `apk` folder, an `apk (1)` duplicate or anywhere else.
+If the folder is missing, or Drive has made a duplicate, stop and tell the
+user; don't create a new one. Whenever a job lands changes on an app's
+default branch:
 
 - Build the APK from the default branch (release where it builds, else debug),
   using the file name already in the folder (`<App>-release.apk` /
   `<App>-debug.apk`).
 - Check it with `apksigner verify`, then overwrite the old file.
 - After a replacement APK passes signature verification, remove stale APKs for
-  that same app from Drive › apk (including superseded debug/release variants).
+  that same app from that folder (including superseded debug/release variants).
   Keep one latest verified APK per app; never remove another app’s APK.
 - Note it on the app's Notion page. Overwriting can change the Drive file id,
   so re-check any Notion link to the file.
