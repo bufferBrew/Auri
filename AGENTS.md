@@ -15,8 +15,9 @@ copy between `brew-shared` markers — edit the canonical file, then run
 ## Members
 
 Brew apps live under `~/Desktop/code/bufferbrew/brewapps/`, one git repo per folder:
-BREW, BrewHire, BrewTales, BrewVoyage, BrewWire, NeuroBrew, VoiceBrew, WealthBrew, brewfeed.
-BrewSkolar was merged into NeuroBrew and retired (2026-10-05).
+BREW, BrewHire, BrewTales, BrewVoyage, BrewWire, Synapse, VoiceBrew, WealthBrew, brewfeed.
+Synapse was NeuroBrew until 2026-11-07. BrewSkolar was merged into it and
+retired (2026-10-05).
 
 Not Brew, whatever older docs say: `craftsman`, `castack`, `WinCtrl`,
 `LitmusLLM`. Don't rename those or fold them into Brew docs.
@@ -29,18 +30,21 @@ Before adding a feature, check it belongs to the app you're in:
 |---|---|---|
 | BrewWire | News APIs, RSS, sports, and the daily AI brief with its collector | Pulls from external sources? It goes here |
 | brewfeed | Notes, linked Notion pages, Blogging drafts | Fetches nothing; shows what you put in |
-| NeuroBrew | Courses, deep dives, voiceover, learning progress from a topic or source | The goal is to understand something? It goes here |
+| Synapse | Courses, deep dives, voiceover, learning progress from a topic or source | The goal is to understand something? It goes here |
 
 Apps hand off to each other by link only (e.g. a BrewWire story opens
-NeuroBrew's new-course screen with `?topic=`). They never read each other's
+Synapse's new-course screen with `?topic=`). They never read each other's
 schema.
 
 ## Naming
 
-- New products/modules get a `<Thing>Brew` (or `Brew<Thing>`) name and target
-  the `bufferBrew` org. No ad-hoc names.
+- Every app has a one-word product name (e.g. Synapse) and sits under one
+  umbrella, Brew: present it as "<Name> · a Brew app", target the `bufferBrew`
+  org, and build on the shared `brew-packages` (code, theme, icon style).
+  Apps are being renamed one at a time; older `<Thing>Brew` names stay until
+  their turn. No ad-hoc names: agree a new name before using it.
 - Supabase Edge Function slugs are flat across the shared project, so prefix
-  them with the app: `brewwire-*`, `brewfeed-*`, `neuro-*`, `core-*`.
+  them with the app: `brewwire-*`, `brewfeed-*`, `synapse-*`, `core-*`.
 
 ## Repo hygiene
 
@@ -77,7 +81,7 @@ Apps are isolated by **Postgres schema**, not by project:
 
 | Schema | Owner |
 |---|---|
-| `public` | BREW (+ NeuroBrew's `nb_*` and the `content_*` pipeline) |
+| `public` | BREW (+ Synapse's `syn_*` and the `content_*` pipeline) |
 | `core` | cross-app contract layer — app registry, outbox, shared LLM keys/connections. BREW owns it; every app may write its own rows |
 | `voyage` | BrewVoyage (inside BREW) |
 | `brewwire` | BrewWire |
