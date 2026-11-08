@@ -13,6 +13,7 @@ import 'features/read_aloud/data/incoming_text.dart';
 import 'features/read_aloud/domain/text_chunk.dart';
 import 'features/read_aloud/domain/text_import.dart';
 import 'mp3.dart';
+import 'on_device/local_kokoro.dart';
 import 'settings_screen.dart';
 import 'speech_api.dart';
 import 'speech_preset.dart';
@@ -99,7 +100,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   AudioPlayer? _audio;
   StreamSubscription<Duration>? _position;
   http.Client? _request;
+
+  /// The finished reading as a file to export: MP3, or WAV from the phone.
   Uint8List? _mp3;
+  bool _mp3IsWav = false;
+
+  /// Kokoro on this phone, loaded on first use and kept while the app runs.
+  LocalKokoroEngine? _engine;
+  LocalModel? _engineModel;
   bool _playing = false, _busy = false;
   double _speed = 1;
   int _offset = 0, _session = 0;
@@ -152,9 +160,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   VoiceSource get _kokoroSource => VoiceSource(
-    Icons.graphic_eq_rounded,
+    Icons.dns_outlined,
     'Kokoro · ${s.kokoroVoice}',
     s.kokoroHost.isEmpty ? 'Your Kokoro server' : 'From ${s.kokoroHost}',
+  );
+
+  String get _phoneVoice => localKokoroVoices.contains(s.kokoroVoice)
+      ? s.kokoroVoice
+      : localKokoroVoices[localKokoroSpeaker(s.kokoroVoice)];
+
+  VoiceSource get _phoneSource => VoiceSource(
+    Icons.memory_rounded,
+    'Kokoro · $_phoneVoice',
+    'On this phone · ${s.local.installed == LocalModel.compact ? 'compact' : 'full'} model',
   );
 
   VoiceSource get _deviceSource => VoiceSource(
@@ -174,7 +192,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     ReadMode.device => _deviceSource,
     ReadMode.api => _apiSource,
     ReadMode.kokoro => _kokoroSource,
-    ReadMode.auto => s.wouldUseKokoro ? _kokoroSource : _deviceSource,
+    ReadMode.phone => _phoneSource,
+    ReadMode.auto => switch (s.nextEngine) {
+      Engine.phone => _phoneSource,
+      Engine.server => _kokoroSource,
+      _ => _deviceSource,
+    },
   };
 
   double get _deviceRate =>
@@ -223,7 +246,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _fallback = null;
       _notice = null;
     });
-    if (s.mode == ReadMode.device) return _readDevice();
+    final phoneReady = s.local.installed != null;
+    switch (s.mode) {
+      case ReadMode.device:
+        return _readDevice();
+      case ReadMode.phone:
+        if (phoneReady) return _readPhone();
+        _warn('Download a Kokoro model in Settings to read on this phone.');
+        return;
+      case ReadMode.auto when s.phoneFirst && phoneReady:
+        return _readPhone();
+      default:
+        break;
+    }
     setState(() => _busy = true);
     _activityIs('Checking Kokoro…');
     final status = await s.checkKokoro();
@@ -231,8 +266,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     setState(() => _busy = false);
     if (status.isAvailable) return _readKokoro();
     if (s.mode == ReadMode.auto) {
-      _fallback = 'Kokoro ${status.short.toLowerCase()}';
-      return _readDevice();
+      _fallback = 'Kokoro server ${status.short.toLowerCase()}';
+      return phoneReady ? _readPhone() : _readDevice();
     }
     _warn(
       'Kokoro can’t read right now: ${status.label}',
@@ -373,7 +408,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
         setState(() {
           _playing = false;
           _offset = 0;
-          if (from == 0) _mp3 = concatMp3(parts);
+          if (from == 0) {
+            _mp3 = concatMp3(parts);
+            _mp3IsWav = false;
+          }
         });
         _toast(
           from == 0
@@ -395,8 +433,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
       }
       s.markKokoroOffline();
       if (s.mode == ReadMode.auto) {
-        _fallback = 'Kokoro stopped answering';
-        await _readDevice();
+        _fallback = 'Kokoro server stopped answering';
+        await (s.local.installed != null && !s.phoneFirst
+            ? _readPhone()
+            : _readDevice());
       } else {
         _warn(
           'Can’t reach Kokoro. Check the Mac is awake and online'
@@ -406,6 +446,134 @@ class _ReaderScreenState extends State<ReaderScreen> {
     } finally {
       client.close();
       if (_request == client) _request = null;
+    }
+  }
+
+  /// The on-device engine for the installed model, loading it if needed.
+  Future<LocalKokoroEngine> _phoneEngine() async {
+    final model = s.local.installed!;
+    if (_engine != null && _engineModel == model) return _engine!;
+    _engine?.dispose();
+    _engine = null;
+    final engine = await LocalKokoroEngine.start(
+      await s.local.dirOf(model),
+      model: model,
+    );
+    _engine = engine;
+    _engineModel = model;
+    return engine;
+  }
+
+  /// Pieces for the phone: a short first one so audio starts quickly.
+  static List<TextChunk> _phoneChunks(String text) {
+    final first = chunkText(text, maxChars: localKokoroFirstChars);
+    if (first.isEmpty) return first;
+    final head = first.first;
+    return [
+      head,
+      for (final c in chunkText(
+        text.substring(head.end),
+        maxChars: localKokoroChunkChars,
+      ))
+        TextChunk(
+          index: c.index + 1,
+          start: head.end + c.start,
+          end: head.end + c.end,
+          text: c.text,
+        ),
+    ];
+  }
+
+  /// Kokoro on this phone: like the server path, the next piece is made
+  /// while this one plays, and a whole reading becomes a WAV to export.
+  Future<void> _readPhone() async {
+    final session = ++_session;
+    final from = _offset.clamp(0, _text.text.length);
+    final chunks = _phoneChunks(_text.text.substring(from));
+    if (chunks.isEmpty) {
+      setState(() => _offset = 0);
+      return;
+    }
+    final voice = _phoneVoice;
+    final parts = <Uint8List>[];
+    setState(() {
+      _playing = true;
+      _busy = true;
+      _source = _phoneSource;
+      _word = null;
+    });
+    _activityIs(_engine == null ? 'Loading the voice model…' : 'Making audio…');
+    try {
+      final engine = await _phoneEngine();
+      if (!mounted || session != _session) return;
+      Future<Uint8List> fetch(TextChunk chunk) {
+        final key = 'phone\n$voice\n${chunk.text}';
+        final cached = _kokoroAudio[key];
+        if (cached != null) return Future.value(cached);
+        final future = engine
+            .speak(chunk.text, voice: voice)
+            .then((bytes) => _kokoroAudio[key] = bytes);
+        future.ignore();
+        return future;
+      }
+
+      await _audio?.dispose();
+      final player = AudioPlayer();
+      _audio = player;
+      var next = fetch(chunks.first);
+      for (var i = 0; i < chunks.length; i++) {
+        final bytes = await next;
+        if (!mounted || session != _session) return;
+        if (i + 1 < chunks.length) next = fetch(chunks[i + 1]);
+        parts.add(bytes);
+        setState(() {
+          _offset = from + chunks[i].start;
+          _busy = false;
+          _activity = null;
+        });
+        await player.setUrl(
+          Uri.dataFromBytes(bytes, mimeType: 'audio/wav').toString(),
+        );
+        await player.setSpeed(_speed);
+        if (!mounted || session != _session) return;
+        await player.play();
+        if (!mounted || session != _session) return;
+        _offset = from + chunks[i].end;
+      }
+      if (mounted && session == _session) {
+        setState(() {
+          _playing = false;
+          _offset = 0;
+          if (from == 0) {
+            _mp3 = concatWav(parts);
+            _mp3IsWav = true;
+          }
+        });
+        _toast(
+          from == 0
+              ? 'Finished · the audio is ready to export'
+              : 'Finished reading',
+        );
+      }
+    } catch (e) {
+      if (!mounted || session != _session) return;
+      setState(() {
+        _playing = false;
+        _busy = false;
+      });
+      _engine?.dispose();
+      _engine = null;
+      if (s.mode == ReadMode.auto) {
+        _fallback = 'Kokoro on this phone failed';
+        await _readDevice();
+      } else {
+        _warn(
+          e is LocalKokoroException
+              ? e.message
+              : 'Kokoro on this phone couldn’t read this.',
+          error: true,
+        );
+      }
     }
   }
 
@@ -444,7 +612,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
         },
       );
       if (!mounted || session != _session) return;
-      setState(() => _mp3 = bytes);
+      setState(() {
+        _mp3 = bytes;
+        _mp3IsWav = false;
+      });
     } on SpeechException catch (e) {
       if (session == _session) _warn(e.message, error: e.status != null);
     } catch (_) {
@@ -558,15 +729,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Future<void> _export() async {
     try {
       final saved = await FilePicker.saveFile(
-        fileName: mp3FileName(
-          _title.text.trim().isEmpty ? 'Voxen' : _title.text,
-        ),
+        fileName: _mp3IsWav
+            ? mp3FileName(
+                _title.text.trim().isEmpty ? 'Voxen' : _title.text,
+              ).replaceFirst(RegExp(r'\.mp3$'), '.wav')
+            : mp3FileName(_title.text.trim().isEmpty ? 'Voxen' : _title.text),
         bytes: _mp3!,
-        mimeType: 'audio/mpeg',
+        mimeType: _mp3IsWav ? 'audio/wav' : 'audio/mpeg',
       );
-      if (saved != null) _toast('MP3 exported');
+      if (saved != null) _toast(_mp3IsWav ? 'WAV exported' : 'MP3 exported');
     } catch (_) {
-      _warn('The MP3 could not be saved. Try again.', error: true);
+      _warn('The audio could not be saved. Try again.', error: true);
     }
   }
 
@@ -596,6 +769,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _fallback = null;
       }
       _lastMode = s.mode;
+      // A deleted or swapped model: let the old engine go.
+      if (_engineModel != null && s.local.installed != _engineModel) {
+        _engine?.dispose();
+        _engine = null;
+        _engineModel = null;
+      }
     });
   }
 
@@ -707,6 +886,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void dispose() {
     s.removeListener(_settingsChanged);
     _incoming.dispose();
+    _engine?.dispose();
     _session++;
     _request?.close();
     _tts?.stop();
@@ -855,7 +1035,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 onVoiceTap: _openVoiceSheet,
                 actions: [
                   PlayerAction(
-                    'Export MP3',
+                    _mp3IsWav ? 'Export WAV' : 'Export MP3',
                     Icons.download_rounded,
                     _mp3 == null || _locked ? null : _export,
                   ),
