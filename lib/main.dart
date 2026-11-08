@@ -11,48 +11,64 @@ import 'features/read_aloud/data/incoming_text.dart';
 import 'features/read_aloud/domain/text_chunk.dart';
 import 'features/read_aloud/domain/text_import.dart';
 import 'mp3.dart';
+import 'settings_screen.dart';
 import 'speech_api.dart';
 import 'speech_preset.dart';
+import 'voice_settings.dart';
 
 void main() => runApp(const VoxenApp());
 
-class VoxenApp extends StatelessWidget {
-  const VoxenApp({super.key});
+class VoxenApp extends StatefulWidget {
+  const VoxenApp({super.key, this.settings});
+
+  /// Injected by tests; the app makes its own on the device.
+  final VoiceSettings? settings;
+
+  @override
+  State<VoxenApp> createState() => _VoxenAppState();
+}
+
+class _VoxenAppState extends State<VoxenApp> {
+  late final VoiceSettings _settings =
+      widget.settings ?? (VoiceSettings(store: DeviceSettingsStore())..load());
+
+  @override
+  void dispose() {
+    if (widget.settings == null) _settings.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Voxen',
     debugShowCheckedModeBanner: false,
     theme: AppTheme.light,
     darkTheme: AppTheme.dark,
-    home: const ReaderScreen(),
+    home: ReaderScreen(settings: _settings),
   );
 }
 
-enum SpeechMode { device, api }
+/// What is reading, and where its voice comes from.
+@immutable
+class VoiceSource {
+  const VoiceSource(this.icon, this.title, this.origin);
+  final IconData icon;
+  final String title;
+  final String origin;
+}
 
 class ReaderScreen extends StatefulWidget {
-  const ReaderScreen({super.key});
+  const ReaderScreen({super.key, required this.settings});
+  final VoiceSettings settings;
   @override
   State<ReaderScreen> createState() => _ReaderScreenState();
 }
 
 class _ReaderScreenState extends State<ReaderScreen> {
+  VoiceSettings get s => widget.settings;
   final _text = TextEditingController();
   final _title = TextEditingController(text: 'My reading');
-  SpeechPreset _preset = SpeechPreset.openai;
-  late final _endpoint = TextEditingController(
-    text: presetSettings(_preset).endpoint,
-  );
-  final _key = TextEditingController();
-  late final _model = TextEditingController(
-    text: presetSettings(_preset).model,
-  );
-  late final _voice = TextEditingController(
-    text: presetSettings(_preset).voice,
-  );
-  List<String>? _voices;
   final _incoming = IncomingText();
-  SpeechMode _mode = SpeechMode.device;
   FlutterTts? _tts;
   AudioPlayer? _audio;
   http.Client? _request;
@@ -62,6 +78,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
   int _offset = 0, _session = 0;
   String _status = 'Ready to read';
   bool _error = false;
+
+  /// The voice reading now (or that read last), and why, when it's a fallback.
+  VoiceSource? _source;
+  String? _fallback;
+
+  /// Kokoro audio already made this session, by voice and chunk text, so
+  /// pausing and resuming doesn't synthesise the same chunk again.
+  final _kokoroAudio = <String, Uint8List>{};
+
   bool get _locked => _playing || _busy;
 
   void _message(String message, {bool error = false}) {
@@ -72,6 +97,32 @@ class _ReaderScreenState extends State<ReaderScreen> {
       });
     }
   }
+
+  VoiceSource get _kokoroSource => VoiceSource(
+    Icons.graphic_eq,
+    'Kokoro · ${s.kokoroVoice}',
+    'From your Kokoro server${s.kokoroHost.isEmpty ? '' : ', ${s.kokoroHost}'}',
+  );
+
+  VoiceSource get _deviceSource => VoiceSource(
+    Icons.phone_android,
+    'Device voice · ${s.deviceVoice ?? 'system default'}',
+    kIsWeb ? 'From this browser' : 'From this device',
+  );
+
+  VoiceSource get _apiSource => VoiceSource(
+    Icons.cloud_outlined,
+    '${presetSettings(s.apiPreset).label} · ${s.apiVoice.isEmpty ? 'no voice set' : s.apiVoice}',
+    'From ${Uri.tryParse(s.apiEndpoint)?.host.nonEmpty ?? 'an endpoint you set'}',
+  );
+
+  /// The voice the next Read aloud would use.
+  VoiceSource get _nextSource => switch (s.mode) {
+    ReadMode.device => _deviceSource,
+    ReadMode.api => _apiSource,
+    ReadMode.kokoro => _kokoroSource,
+    ReadMode.auto => s.wouldUseKokoro ? _kokoroSource : _deviceSource,
+  };
 
   Future<void> _stop({bool reset = false}) async {
     _session++;
@@ -91,18 +142,38 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _message(reset ? 'Ready to read' : 'Paused');
   }
 
-  Future<void> _readDevice() async {
+  /// Read aloud in the chosen mode. Automatic picks Kokoro when it answers,
+  /// and the device voice when it doesn't.
+  Future<void> _readAloud() async {
     if (_text.text.trim().isEmpty) {
       _message('Paste or import some text first.');
       return;
     }
+    _fallback = null;
+    if (s.mode == ReadMode.device) return _readDevice();
+    setState(() => _busy = true);
+    _message('Checking Kokoro…');
+    final status = await s.checkKokoro();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (status.isAvailable) return _readKokoro();
+    if (s.mode == ReadMode.auto) {
+      _fallback =
+          'Kokoro isn’t available (${status.label}). Using the device voice.';
+      return _readDevice();
+    }
+    _message('Kokoro can’t read now: ${status.label}', error: true);
+  }
+
+  Future<void> _readDevice() async {
     final session = ++_session;
     final tts = FlutterTts();
     _tts = tts;
     setState(() {
       _playing = true;
       _error = false;
-      _status = 'Reading with device TTS';
+      _source = _deviceSource;
+      _status = 'Reading with the device voice';
     });
     try {
       await tts.awaitSpeakCompletion(true);
@@ -148,10 +219,119 @@ class _ReaderScreenState extends State<ReaderScreen> {
       if (mounted && session == _session) {
         setState(() => _playing = false);
         _message(
-          'Device TTS is unavailable. Install a system voice or choose API voice.',
+          'The device voice is unavailable. Install a system voice, or pick another mode in Settings.',
           error: true,
         );
       }
+    }
+  }
+
+  /// Kokoro, chunk by chunk: the next chunk is made while this one plays.
+  /// A whole reading from the start also becomes an MP3 you can export.
+  Future<void> _readKokoro() async {
+    final session = ++_session;
+    final client = http.Client();
+    _request = client;
+    final api = SpeechApi(client);
+    final from = _offset.clamp(0, _text.text.length);
+    final chunks = chunkText(_text.text.substring(from));
+    if (chunks.isEmpty) {
+      client.close();
+      setState(() => _offset = 0);
+      _message('Finished reading');
+      return;
+    }
+    final voice = s.kokoroVoice;
+    final parts = <Uint8List>[];
+    setState(() {
+      _playing = true;
+      _error = false;
+      _source = _kokoroSource;
+      _status = 'Getting Kokoro audio…';
+    });
+
+    Future<Uint8List> fetch(TextChunk chunk) {
+      final key = '$voice\n${chunk.text}';
+      final cached = _kokoroAudio[key];
+      if (cached != null) return Future.value(cached);
+      final future = api
+          .generate(
+            text: chunk.text,
+            endpoint: s.kokoroEndpoint,
+            apiKey: s.kokoroToken,
+            model: kokoroModel,
+            voice: voice,
+          )
+          .then((bytes) => _kokoroAudio[key] = bytes);
+      // A paused reading never awaits its prefetch; don't let that fail loudly.
+      future.ignore();
+      return future;
+    }
+
+    try {
+      await _audio?.dispose();
+      final player = AudioPlayer();
+      _audio = player;
+      var next = fetch(chunks.first);
+      for (var i = 0; i < chunks.length; i++) {
+        final bytes = await next;
+        if (!mounted || session != _session) return;
+        if (i + 1 < chunks.length) next = fetch(chunks[i + 1]);
+        parts.add(bytes);
+        setState(() => _offset = from + chunks[i].start);
+        _message(
+          chunks.length == 1
+              ? 'Reading with Kokoro'
+              : 'Reading with Kokoro: part ${i + 1} of ${chunks.length}',
+        );
+        await player.setUrl(
+          Uri.dataFromBytes(bytes, mimeType: 'audio/mpeg').toString(),
+        );
+        await player.setSpeed(_speed);
+        if (!mounted || session != _session) return;
+        await player.play();
+        if (!mounted || session != _session) return;
+        _offset = from + chunks[i].end;
+      }
+      if (mounted && session == _session) {
+        setState(() {
+          _playing = false;
+          _offset = 0;
+          if (from == 0) _mp3 = concatMp3(parts);
+        });
+        _message(
+          from == 0
+              ? 'Finished reading · MP3 ready to export'
+              : 'Finished reading',
+        );
+      }
+    } catch (e) {
+      if (!mounted || session != _session) return;
+      setState(() => _playing = false);
+      final rejected =
+          e is SpeechException && (e.status == 401 || e.status == 403);
+      if (rejected) {
+        _message(
+          'Kokoro rejected the token. Check it in Settings.',
+          error: true,
+        );
+        return;
+      }
+      s.markKokoroOffline();
+      if (s.mode == ReadMode.auto) {
+        _fallback =
+            'Kokoro stopped answering. Carrying on with the device voice.';
+        await _readDevice();
+      } else {
+        _message(
+          'Could not reach Kokoro. Check the Mac is awake and online'
+          '${kIsWeb ? ', and that the server allows CORS' : ''}.',
+          error: true,
+        );
+      }
+    } finally {
+      client.close();
+      if (_request == client) _request = null;
     }
   }
 
@@ -163,14 +343,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _busy = true;
       _mp3 = null;
       _error = false;
+      _fallback = null;
+      _source = _apiSource;
     });
     try {
       final bytes = await SpeechApi(client).generate(
         text: _text.text,
-        endpoint: _endpoint.text,
-        apiKey: _key.text,
-        model: _model.text,
-        voice: _voice.text,
+        endpoint: s.apiEndpoint,
+        apiKey: s.apiKey,
+        model: s.apiModel,
+        voice: s.apiVoice,
         speed: _speed,
         onProgress: (done, total) {
           if (session == _session) {
@@ -184,63 +366,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     } on SpeechException catch (e) {
       if (session == _session) _message(e.message, error: true);
     } catch (_) {
-      if (session == _session) _message(_unreachable, error: true);
-    } finally {
-      client.close();
-      if (mounted && session == _session) {
-        setState(() {
-          _busy = false;
-          _request = null;
-        });
+      if (session == _session) {
+        _message(
+          'Could not reach the speech provider. Check your connection and endpoint; web providers must allow CORS.',
+          error: true,
+        );
       }
-    }
-  }
-
-  String get _unreachable => _preset == SpeechPreset.kokoro
-      ? 'Could not reach Kokoro. Check the Mac is awake and online${kIsWeb ? ', and that the server allows CORS' : ''}.'
-      : 'Could not reach the speech provider. Check your connection and endpoint; web providers must allow CORS.';
-
-  /// Fills in a provider's settings. The key is cleared on every switch, so a
-  /// key typed for one provider is never sent to another.
-  void _choosePreset(SpeechPreset preset) {
-    final settings = presetSettings(preset);
-    setState(() {
-      _preset = preset;
-      _voices = null;
-      _key.clear();
-      if (preset != SpeechPreset.custom) {
-        _endpoint.text = settings.endpoint;
-        _model.text = settings.model;
-        _voice.text = settings.voice;
-      }
-      _mp3 = null;
-      _offset = 0;
-    });
-  }
-
-  Future<void> _loadVoices() async {
-    final session = ++_session;
-    final client = http.Client();
-    _request = client;
-    setState(() {
-      _busy = true;
-      _error = false;
-      _status = 'Loading voices';
-    });
-    try {
-      final voices = await SpeechApi(
-        client,
-      ).voices(endpoint: _endpoint.text, apiKey: _key.text);
-      if (!mounted || session != _session) return;
-      setState(() {
-        _voices = voices;
-        if (!voices.contains(_voice.text.trim())) _voice.text = voices.first;
-      });
-      _message('${voices.length} voices loaded');
-    } on SpeechException catch (e) {
-      if (session == _session) _message(e.message, error: true);
-    } catch (_) {
-      if (session == _session) _message(_unreachable, error: true);
     } finally {
       client.close();
       if (mounted && session == _session) {
@@ -267,7 +398,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         Uri.dataFromBytes(_mp3!, mimeType: 'audio/mpeg').toString(),
       );
       if (!mounted || session != _session) return;
-      _message('Playing generated voice');
+      _message('Playing the MP3');
       await player.play();
       if (mounted && session == _session) {
         setState(() => _playing = false);
@@ -329,15 +460,38 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _offset = 0;
   });
 
+  ReadMode? _lastMode;
+
+  void _settingsChanged() {
+    if (!mounted) return;
+    setState(() {
+      // A different mode starts the reading over.
+      if (_lastMode != null && _lastMode != s.mode) {
+        _offset = 0;
+        _mp3 = null;
+      }
+      _lastMode = s.mode;
+    });
+  }
+
+  Future<void> _openSettings() async {
+    if (_locked) await _stop();
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => SettingsScreen(settings: s)),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
+    _lastMode = s.mode;
+    s.addListener(_settingsChanged);
     _incoming.listen(_readIncoming);
   }
 
-  /// Text selected in another app: load it and, with device voices, start
-  /// reading right away. API voices wait for the user, since generating costs
-  /// money and needs a key.
+  /// Text selected in another app: load it and start reading right away,
+  /// except with Other API, which costs money and waits for Generate.
   Future<void> _readIncoming(String text) async {
     if (!mounted) return;
     await _stop(reset: true);
@@ -348,31 +502,42 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _offset = 0;
       _mp3 = null;
     });
-    if (_mode == SpeechMode.device) {
-      await _readDevice();
-    } else {
+    if (s.mode == ReadMode.api) {
       _message('Text loaded — generate audio to listen');
+    } else {
+      await _readAloud();
     }
   }
 
   @override
   void dispose() {
+    s.removeListener(_settingsChanged);
     _incoming.dispose();
     _session++;
     _request?.close();
     _tts?.stop();
     _audio?.dispose();
-    for (final c in [_text, _title, _endpoint, _key, _model, _voice]) {
-      c.dispose();
-    }
+    _text.dispose();
+    _title.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final api = s.mode == ReadMode.api;
+    final source = _locked && _source != null ? _source! : _nextSource;
     return Scaffold(
-      appBar: AppBar(title: const Text('Voxen')),
+      appBar: AppBar(
+        title: const Text('Voxen'),
+        actions: [
+          IconButton(
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: _openSettings,
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
@@ -390,108 +555,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   'Paste text or bring a document. Listen at your own pace.',
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                DropdownButtonFormField<SpeechMode>(
-                  initialValue: _mode,
-                  decoration: const InputDecoration(labelText: 'Speech engine'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: SpeechMode.device,
-                      child: Text('Device TTS · default'),
-                    ),
-                    DropdownMenuItem(
-                      value: SpeechMode.api,
-                      child: Text('API voice · MP3 export'),
-                    ),
-                  ],
-                  onChanged: _locked
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _mode = value!;
-                            _offset = 0;
-                          });
-                        },
+                _SourceCard(
+                  heading: _playing
+                      ? 'Reading with'
+                      : _busy
+                      ? 'Getting ready'
+                      : 'Will read with',
+                  source: source,
+                  mode: s.mode,
+                  note: _fallback,
+                  onChange: _locked ? null : _openSettings,
                 ),
-                if (_mode == SpeechMode.api) ...[
-                  const SizedBox(height: AppSpacing.lg),
-                  DropdownButtonFormField<SpeechPreset>(
-                    initialValue: _preset,
-                    decoration: const InputDecoration(labelText: 'Provider'),
-                    items: [
-                      for (final preset in SpeechPreset.values)
-                        DropdownMenuItem(
-                          value: preset,
-                          child: Text(presetSettings(preset).label),
-                        ),
-                    ],
-                    onChanged: _locked ? null : (v) => _choosePreset(v!),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    _preset == SpeechPreset.kokoro
-                        ? 'Kokoro runs on your own server, so there are no provider charges. Your text is sent to the endpoint below. Your token stays in memory until you close or reload this app.'
-                        : 'Generated voices are AI audio. Your text is sent to the endpoint below; provider charges may apply. Your key stays in memory until you close or reload this app.',
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  _field(
-                    _endpoint,
-                    'HTTPS speech endpoint',
-                    hint: _preset == SpeechPreset.kokoro
-                        ? 'https://<your-server>/v1/audio/speech'
-                        : null,
-                    onChanged: () => setState(() => _voices = null),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _field(_key, presetSettings(_preset).keyLabel, secret: true),
-                  const SizedBox(height: AppSpacing.md),
-                  _field(_model, 'Model'),
-                  const SizedBox(height: AppSpacing.md),
-                  if (_voices case final voices?)
-                    DropdownButtonFormField<String>(
-                      key: ValueKey(voices),
-                      initialValue: _voice.text,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Voice'),
-                      items: [
-                        for (final v in voices)
-                          DropdownMenuItem(value: v, child: Text(v)),
-                      ],
-                      onChanged: _locked
-                          ? null
-                          : (v) {
-                              _voice.text = v!;
-                              _invalidate();
-                            },
-                    )
-                  else
-                    _field(_voice, 'Voice'),
-                  Wrap(
-                    spacing: AppSpacing.md,
-                    children: [
-                      if (_preset != SpeechPreset.openai)
-                        TextButton(
-                          onPressed: _locked ? null : _loadVoices,
-                          child: const Text('Load voices'),
-                        ),
-                      TextButton(
-                        onPressed: _locked
-                            ? null
-                            : () {
-                                _key.clear();
-                                _invalidate();
-                              },
-                        child: Text(
-                          'Clear ${presetSettings(_preset).keyLabel}',
-                        ),
-                      ),
-                    ],
-                  ),
-                ] else ...[
-                  const SizedBox(height: AppSpacing.md),
-                  const Text(
-                    'Uses your system’s default voice and language. No API key needed. Offline availability depends on your installed voice.',
-                  ),
-                ],
                 const SizedBox(height: AppSpacing.lg),
                 TextField(
                   controller: _title,
@@ -546,7 +620,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       : (v) {
                           setState(() {
                             _speed = v;
-                            _mp3 = null;
+                            if (api) _mp3 = null;
                           });
                         },
                 ),
@@ -554,9 +628,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   spacing: AppSpacing.md,
                   runSpacing: AppSpacing.md,
                   children: [
-                    if (_mode == SpeechMode.device)
+                    if (!api)
                       FilledButton.icon(
-                        onPressed: _locked ? null : _readDevice,
+                        onPressed: _locked ? null : _readAloud,
                         icon: const Icon(Icons.volume_up),
                         label: Text(
                           _offset > 0 ? 'Resume reading' : 'Read aloud',
@@ -573,12 +647,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
                         icon: const Icon(Icons.play_arrow),
                         label: const Text('Play MP3'),
                       ),
+                    ],
+                    if (api || _mp3 != null)
                       OutlinedButton.icon(
                         onPressed: _locked || _mp3 == null ? null : _export,
                         icon: const Icon(Icons.download),
                         label: const Text('Export MP3'),
                       ),
-                    ],
                     if (_playing || (_busy && _request != null))
                       OutlinedButton(
                         onPressed: () => _stop(),
@@ -605,7 +680,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 const Text(
-                  'Documents and keys are not saved by Voxen. Export your MP3 before closing.',
+                  'Documents and audio are not saved by Voxen. Export your MP3 before closing.',
                 ),
               ],
             ),
@@ -614,23 +689,72 @@ class _ReaderScreenState extends State<ReaderScreen> {
       ),
     );
   }
+}
 
-  Widget _field(
-    TextEditingController controller,
-    String label, {
-    bool secret = false,
-    String? hint,
-    VoidCallback? onChanged,
-  }) => TextField(
-    controller: controller,
-    enabled: !_locked,
-    obscureText: secret,
-    autocorrect: false,
-    enableSuggestions: false,
-    decoration: InputDecoration(labelText: label, hintText: hint),
-    onChanged: (_) {
-      onChanged?.call();
-      _invalidate();
-    },
-  );
+class _SourceCard extends StatelessWidget {
+  const _SourceCard({
+    required this.heading,
+    required this.source,
+    required this.mode,
+    required this.onChange,
+    this.note,
+  });
+  final String heading;
+  final VoiceSource source;
+  final ReadMode mode;
+  final String? note;
+  final VoidCallback? onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Semantics(
+          liveRegion: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$heading · ${mode.label}',
+                      style: theme.textTheme.labelLarge,
+                    ),
+                  ),
+                  TextButton(onPressed: onChange, child: const Text('Change')),
+                ],
+              ),
+              Row(
+                children: [
+                  Icon(source.icon, color: theme.colorScheme.primary),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(source.title, style: theme.textTheme.titleMedium),
+                        Text(source.origin, style: theme.textTheme.bodySmall),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (note != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(note!, style: theme.textTheme.bodySmall),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+extension on String {
+  String? get nonEmpty => isEmpty ? null : this;
 }
