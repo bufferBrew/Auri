@@ -12,6 +12,7 @@ import 'features/read_aloud/domain/text_chunk.dart';
 import 'features/read_aloud/domain/text_import.dart';
 import 'mp3.dart';
 import 'speech_api.dart';
+import 'speech_preset.dart';
 
 void main() => runApp(const VoxenApp());
 
@@ -38,12 +39,18 @@ class ReaderScreen extends StatefulWidget {
 class _ReaderScreenState extends State<ReaderScreen> {
   final _text = TextEditingController();
   final _title = TextEditingController(text: 'My reading');
-  final _endpoint = TextEditingController(
-    text: 'https://api.openai.com/v1/audio/speech',
+  SpeechPreset _preset = SpeechPreset.openai;
+  late final _endpoint = TextEditingController(
+    text: presetSettings(_preset).endpoint,
   );
   final _key = TextEditingController();
-  final _model = TextEditingController(text: 'tts-1');
-  final _voice = TextEditingController(text: 'alloy');
+  late final _model = TextEditingController(
+    text: presetSettings(_preset).model,
+  );
+  late final _voice = TextEditingController(
+    text: presetSettings(_preset).voice,
+  );
+  List<String>? _voices;
   final _incoming = IncomingText();
   SpeechMode _mode = SpeechMode.device;
   FlutterTts? _tts;
@@ -177,12 +184,63 @@ class _ReaderScreenState extends State<ReaderScreen> {
     } on SpeechException catch (e) {
       if (session == _session) _message(e.message, error: true);
     } catch (_) {
-      if (session == _session) {
-        _message(
-          'Could not reach the speech provider. Check your connection and endpoint; web providers must allow CORS.',
-          error: true,
-        );
+      if (session == _session) _message(_unreachable, error: true);
+    } finally {
+      client.close();
+      if (mounted && session == _session) {
+        setState(() {
+          _busy = false;
+          _request = null;
+        });
       }
+    }
+  }
+
+  String get _unreachable => _preset == SpeechPreset.kokoro
+      ? 'Could not reach Kokoro. Check the Mac is awake and online${kIsWeb ? ', and that the server allows CORS' : ''}.'
+      : 'Could not reach the speech provider. Check your connection and endpoint; web providers must allow CORS.';
+
+  /// Fills in a provider's settings. The key is cleared on every switch, so a
+  /// key typed for one provider is never sent to another.
+  void _choosePreset(SpeechPreset preset) {
+    final settings = presetSettings(preset);
+    setState(() {
+      _preset = preset;
+      _voices = null;
+      _key.clear();
+      if (preset != SpeechPreset.custom) {
+        _endpoint.text = settings.endpoint;
+        _model.text = settings.model;
+        _voice.text = settings.voice;
+      }
+      _mp3 = null;
+      _offset = 0;
+    });
+  }
+
+  Future<void> _loadVoices() async {
+    final session = ++_session;
+    final client = http.Client();
+    _request = client;
+    setState(() {
+      _busy = true;
+      _error = false;
+      _status = 'Loading voices';
+    });
+    try {
+      final voices = await SpeechApi(
+        client,
+      ).voices(endpoint: _endpoint.text, apiKey: _key.text);
+      if (!mounted || session != _session) return;
+      setState(() {
+        _voices = voices;
+        if (!voices.contains(_voice.text.trim())) _voice.text = voices.first;
+      });
+      _message('${voices.length} voices loaded');
+    } on SpeechException catch (e) {
+      if (session == _session) _message(e.message, error: true);
+    } catch (_) {
+      if (session == _session) _message(_unreachable, error: true);
     } finally {
       client.close();
       if (mounted && session == _session) {
@@ -356,25 +414,77 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 ),
                 if (_mode == SpeechMode.api) ...[
                   const SizedBox(height: AppSpacing.lg),
-                  const Text(
-                    'Generated voices are AI audio. Your text is sent to the endpoint below; provider charges may apply. Your key stays in memory until you close or reload this app.',
+                  DropdownButtonFormField<SpeechPreset>(
+                    initialValue: _preset,
+                    decoration: const InputDecoration(labelText: 'Provider'),
+                    items: [
+                      for (final preset in SpeechPreset.values)
+                        DropdownMenuItem(
+                          value: preset,
+                          child: Text(presetSettings(preset).label),
+                        ),
+                    ],
+                    onChanged: _locked ? null : (v) => _choosePreset(v!),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    _preset == SpeechPreset.kokoro
+                        ? 'Kokoro runs on your own server, so there are no provider charges. Your text is sent to the endpoint below. Your token stays in memory until you close or reload this app.'
+                        : 'Generated voices are AI audio. Your text is sent to the endpoint below; provider charges may apply. Your key stays in memory until you close or reload this app.',
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  _field(_endpoint, 'HTTPS speech endpoint'),
+                  _field(
+                    _endpoint,
+                    'HTTPS speech endpoint',
+                    hint: _preset == SpeechPreset.kokoro
+                        ? 'https://<your-server>/v1/audio/speech'
+                        : null,
+                    onChanged: () => setState(() => _voices = null),
+                  ),
                   const SizedBox(height: AppSpacing.md),
-                  _field(_key, 'API key', secret: true),
+                  _field(_key, presetSettings(_preset).keyLabel, secret: true),
                   const SizedBox(height: AppSpacing.md),
                   _field(_model, 'Model'),
                   const SizedBox(height: AppSpacing.md),
-                  _field(_voice, 'Voice'),
-                  TextButton(
-                    onPressed: _locked
-                        ? null
-                        : () {
-                            _key.clear();
-                            _invalidate();
-                          },
-                    child: const Text('Clear API key'),
+                  if (_voices case final voices?)
+                    DropdownButtonFormField<String>(
+                      key: ValueKey(voices),
+                      initialValue: _voice.text,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Voice'),
+                      items: [
+                        for (final v in voices)
+                          DropdownMenuItem(value: v, child: Text(v)),
+                      ],
+                      onChanged: _locked
+                          ? null
+                          : (v) {
+                              _voice.text = v!;
+                              _invalidate();
+                            },
+                    )
+                  else
+                    _field(_voice, 'Voice'),
+                  Wrap(
+                    spacing: AppSpacing.md,
+                    children: [
+                      if (_preset != SpeechPreset.openai)
+                        TextButton(
+                          onPressed: _locked ? null : _loadVoices,
+                          child: const Text('Load voices'),
+                        ),
+                      TextButton(
+                        onPressed: _locked
+                            ? null
+                            : () {
+                                _key.clear();
+                                _invalidate();
+                              },
+                        child: Text(
+                          'Clear ${presetSettings(_preset).keyLabel}',
+                        ),
+                      ),
+                    ],
                   ),
                 ] else ...[
                   const SizedBox(height: AppSpacing.md),
@@ -509,13 +619,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
     TextEditingController controller,
     String label, {
     bool secret = false,
+    String? hint,
+    VoidCallback? onChanged,
   }) => TextField(
     controller: controller,
     enabled: !_locked,
     obscureText: secret,
     autocorrect: false,
     enableSuggestions: false,
-    decoration: InputDecoration(labelText: label),
-    onChanged: (_) => _invalidate(),
+    decoration: InputDecoration(labelText: label, hintText: hint),
+    onChanged: (_) {
+      onChanged?.call();
+      _invalidate();
+    },
   );
 }

@@ -8,8 +8,8 @@ NeuroBrew without changing or removing NeuroBrew's reader.
 - **Device TTS by default:** paste text and press Read aloud. No account, backend,
   API key, or configuration required. Uses the system's default voice/language.
 - **API voice + MP3:** choose API voice, enter your own API key, generate audio,
-  then play it or export an MP3. Defaults to OpenAI's speech endpoint, `tts-1`,
-  and `alloy`. HTTPS OpenAI-compatible endpoints can be configured too.
+  then play it or export an MP3. Presets for OpenAI (`tts-1`, `alloy`) and a
+  self-hosted Kokoro server; any HTTPS OpenAI-compatible endpoint works too.
 - Import TXT, Markdown, text-based PDF, and EPUB documents locally.
 - Speed control, device pause/resume, and long-text chunking.
 - Light/dark themes and an adaptive layout.
@@ -45,6 +45,30 @@ the generated development build configuration uses debug signing.
    incur charges. Long documents require multiple requests.
 4. Press **Play MP3** or **Export MP3**. Export uses the platform save dialog
    or browser download. Regeneration is not needed to export the generated audio.
+
+**Provider** picks ready-made settings: OpenAI, Kokoro, or Custom (your own
+values). Switching provider clears the key, so a key typed for one provider is
+never sent to another. Kokoro and Custom also have **Load voices**, which reads
+the voice list from the server next to the speech endpoint (`/audio/voices`).
+
+### Kokoro
+
+[Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) is a self-hosted,
+OpenAI-compatible neural voice server. Voxen can use the same one Synapse reads
+aloud with: no provider charges, and 70-odd voices (default `af_heart`). Bake
+the server's address into a build so you only paste the token:
+
+```sh
+flutter build apk --release --dart-define=KOKORO_URL=https://<your-server>
+```
+
+Without the define, choose Kokoro and type the endpoint
+(`https://<your-server>/v1/audio/speech`). The token is entered at runtime like
+any key and is never a build define. If the server is asleep or offline,
+generation fails with a message and device TTS still works. On web the server
+must answer CORS preflight requests; a token gate that rejects every request
+without the token (as Synapse's Caddy setup does) blocks the browser, so use the
+Android app there.
 
 The API follows the [OpenAI speech contract](https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create).
 Other providers must implement that contract and return MP3 bytes. Web providers
