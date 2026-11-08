@@ -1,8 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:voxen/appearance_settings.dart';
+import 'package:voxen/core/theme/app_theme.dart';
 import 'package:voxen/main.dart';
+import 'package:voxen/settings_screen.dart';
 import 'package:voxen/voice_settings.dart';
 
 VoiceSettings settings({ReadMode mode = ReadMode.auto, http.Client? client}) =>
@@ -11,28 +16,65 @@ VoiceSettings settings({ReadMode mode = ReadMode.auto, http.Client? client}) =>
       client: client == null ? null : () => client,
     )..mode = mode;
 
-Future<void> scrollTo(WidgetTester tester, Finder finder) => tester
-    .scrollUntilVisible(finder, 200, scrollable: find.byType(Scrollable).first);
+IconButton playButton(WidgetTester tester) => tester.widget<IconButton>(
+  find.ancestor(
+    of: find.byIcon(Icons.play_arrow_rounded),
+    matching: find.byType(IconButton),
+  ),
+);
 
 void main() {
-  testWidgets('Automatic without Kokoro reads with the device voice', (
+  testWidgets('empty reader offers Paste and Import, and play waits for text', (
     tester,
   ) async {
     await tester.pumpWidget(VoxenApp(settings: settings()));
-    expect(find.text('Will read with · Automatic'), findsOneWidget);
-    expect(find.text('Device voice · system default'), findsOneWidget);
+    expect(find.text('Paste'), findsOneWidget);
+    expect(find.text('Import document'), findsOneWidget);
+    expect(find.text('Device voice'), findsOneWidget);
     expect(find.text('From this device'), findsOneWidget);
-    expect(find.text('API key'), findsNothing);
-    await scrollTo(tester, find.text('Read aloud'));
-    await tester.ensureVisible(find.text('Read aloud'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Read aloud'));
+    expect(playButton(tester).onPressed, isNull);
+
+    await tester.enterText(find.byType(TextField).last, 'Hello there.');
     await tester.pump();
-    await scrollTo(tester, find.text('Paste or import some text first.'));
-    expect(find.text('Paste or import some text first.'), findsOneWidget);
+    expect(find.text('2 words · about 1 min to listen'), findsOneWidget);
+    expect(find.text('Paste'), findsNothing);
+    expect(playButton(tester).onPressed, isNotNull);
   });
 
-  testWidgets('Automatic shows Kokoro and its server when it answers', (
+  testWidgets('Ctrl+Enter starts and pauses reading, with the text shown', (
+    tester,
+  ) async {
+    // A speech engine that accepts every call and is still speaking.
+    final speaking = Completer<Object?>();
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('flutter_tts'),
+      (call) => call.method == 'speak' ? speaking.future : Future.value(1),
+    );
+    await tester.pumpWidget(
+      VoxenApp(settings: settings(mode: ReadMode.device)),
+    );
+    await tester.enterText(
+      find.byType(TextField).last,
+      'First sentence. Second sentence.',
+    );
+    Future<void> shortcut() async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
+
+    await shortcut();
+    expect(find.text('Reading · 0%'), findsOneWidget);
+    expect(find.byTooltip('Pause'), findsOneWidget);
+    expect(find.text('Edit'), findsNothing, reason: 'no editing mid-read');
+
+    await shortcut();
+    expect(find.byTooltip('Read aloud'), findsOneWidget);
+    expect(find.text('Edit'), findsNothing, reason: 'still at the start');
+  });
+
+  testWidgets('the player names Kokoro and its server when it answers', (
     tester,
   ) async {
     final s =
@@ -48,22 +90,31 @@ void main() {
     await tester.runAsync(() => s.checkKokoro());
     await tester.pump();
     expect(find.text('Kokoro · af_heart'), findsOneWidget);
-    expect(
-      find.text('From your Kokoro server, mac.example.ts.net'),
-      findsOneWidget,
-    );
+    expect(find.text('From mac.example.ts.net'), findsOneWidget);
   });
 
-  testWidgets('Other API mode keeps Generate, and export waits for audio', (
+  testWidgets('Other API generates on play, and export waits for audio', (
     tester,
   ) async {
     await tester.pumpWidget(VoxenApp(settings: settings(mode: ReadMode.api)));
-    await scrollTo(tester, find.text('Export MP3'));
-    expect(find.text('Read aloud'), findsNothing);
-    final export = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, 'Export MP3'),
+    expect(find.byTooltip('Generate and play'), findsOneWidget);
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    final export = tester.widget<MenuItemButton>(
+      find.widgetWithText(MenuItemButton, 'Export MP3'),
     );
     expect(export.onPressed, isNull);
+  });
+
+  testWidgets('the voice sheet switches mode from the player', (tester) async {
+    final s = settings();
+    await tester.pumpWidget(VoxenApp(settings: s));
+    await tester.tap(find.text('Device voice'));
+    await tester.pumpAndSettle();
+    expect(find.text('Voice'), findsOneWidget);
+    await tester.tap(find.text('Device voice only'));
+    await tester.pumpAndSettle();
+    expect(s.mode, ReadMode.device);
   });
 
   testWidgets('Settings lists every mode with its availability', (
@@ -76,33 +127,71 @@ void main() {
     for (final mode in ReadMode.values) {
       expect(find.text(mode.label), findsOneWidget);
     }
-    expect(
-      find.text('Kokoro · Not set up: add the server address'),
-      findsOneWidget,
-    );
-    expect(
-      find.text('This device · Available · system default voice'),
-      findsOneWidget,
-    );
+    expect(find.text('Not set up'), findsWidgets);
+    expect(find.text('Using this device'), findsOneWidget);
     await tester.tap(find.text('Device voice only'));
     await tester.pumpAndSettle();
     expect(s.mode, ReadMode.device);
     expect(await (s.store as MemorySettingsStore).read('read_mode'), 'device');
   });
 
-  testWidgets('small screen and enlarged text do not overflow', (tester) async {
-    tester.view.physicalSize = const Size(360, 740);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
-          child: ReaderScreen(settings: settings()),
-        ),
-      ),
+  testWidgets('appearance: dark mode and a colour theme apply and persist', (
+    tester,
+  ) async {
+    final store = MemorySettingsStore();
+    final look = AppearanceSettings(store: store);
+    await tester.pumpWidget(VoxenApp(settings: settings(), appearance: look));
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dark'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Neon colour'));
+    await tester.pumpAndSettle();
+    expect(look.themeMode, ThemeMode.dark);
+    expect(look.palette, AppPalette.neon);
+    final colors = Theme.of(
+      tester.element(find.byType(SettingsScreen)),
+    ).extension<AppColors>()!;
+    expect(
+      colors.background,
+      AppColors.of(AppPalette.neon, Brightness.dark).background,
     );
-    expect(tester.takeException(), isNull);
+    final reopened = AppearanceSettings(store: store);
+    await reopened.load();
+    expect(reopened.themeMode, ThemeMode.dark);
+    expect(reopened.palette, AppPalette.neon);
   });
+
+  for (final screen in ['reader', 'settings']) {
+    testWidgets('$screen: small screen and 2× text do not overflow', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 740);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final s = settings();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: MediaQuery(
+            data: const MediaQueryData(
+              size: Size(360, 740),
+              textScaler: TextScaler.linear(2),
+            ),
+            child: screen == 'reader'
+                ? ReaderScreen(settings: s)
+                : SettingsScreen(
+                    settings: s,
+                    appearance: AppearanceSettings(
+                      store: MemorySettingsStore(),
+                    ),
+                  ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

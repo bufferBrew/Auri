@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
+import 'appearance_settings.dart';
 import 'core/theme/app_theme.dart';
 import 'features/read_aloud/data/file_importer.dart';
 import 'features/read_aloud/data/incoming_text.dart';
@@ -14,52 +16,56 @@ import 'mp3.dart';
 import 'settings_screen.dart';
 import 'speech_api.dart';
 import 'speech_preset.dart';
+import 'ui/player_bar.dart';
+import 'ui/reading_view.dart';
+import 'ui/voice_widgets.dart';
 import 'voice_settings.dart';
 
 void main() => runApp(const VoxenApp());
 
 class VoxenApp extends StatefulWidget {
-  const VoxenApp({super.key, this.settings});
+  const VoxenApp({super.key, this.settings, this.appearance});
 
   /// Injected by tests; the app makes its own on the device.
   final VoiceSettings? settings;
+  final AppearanceSettings? appearance;
 
   @override
   State<VoxenApp> createState() => _VoxenAppState();
 }
 
 class _VoxenAppState extends State<VoxenApp> {
+  late final _store = DeviceSettingsStore();
   late final VoiceSettings _settings =
-      widget.settings ?? (VoiceSettings(store: DeviceSettingsStore())..load());
+      widget.settings ?? (VoiceSettings(store: _store)..load());
+  late final AppearanceSettings _appearance =
+      widget.appearance ?? (AppearanceSettings(store: _store)..load());
 
   @override
   void dispose() {
     if (widget.settings == null) _settings.dispose();
+    if (widget.appearance == null) _appearance.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Voxen',
-    debugShowCheckedModeBanner: false,
-    theme: AppTheme.light,
-    darkTheme: AppTheme.dark,
-    home: ReaderScreen(settings: _settings),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _appearance,
+    builder: (context, _) => MaterialApp(
+      title: 'Voxen',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.of(_appearance.palette, Brightness.light),
+      darkTheme: AppTheme.of(_appearance.palette, Brightness.dark),
+      themeMode: _appearance.themeMode,
+      home: ReaderScreen(settings: _settings, appearance: _appearance),
+    ),
   );
 }
 
-/// What is reading, and where its voice comes from.
-@immutable
-class VoiceSource {
-  const VoiceSource(this.icon, this.title, this.origin);
-  final IconData icon;
-  final String title;
-  final String origin;
-}
-
 class ReaderScreen extends StatefulWidget {
-  const ReaderScreen({super.key, required this.settings});
+  const ReaderScreen({super.key, required this.settings, this.appearance});
   final VoiceSettings settings;
+  final AppearanceSettings? appearance;
   @override
   State<ReaderScreen> createState() => _ReaderScreenState();
 }
@@ -67,19 +73,34 @@ class ReaderScreen extends StatefulWidget {
 class _ReaderScreenState extends State<ReaderScreen> {
   VoiceSettings get s => widget.settings;
   final _text = TextEditingController();
-  final _title = TextEditingController(text: 'My reading');
+  final _title = TextEditingController();
   final _incoming = IncomingText();
+
+  /// Holds keyboard focus when no field does, so Ctrl/⌘+Enter always works.
+  final _screenFocus = FocusNode(debugLabel: 'reader');
   FlutterTts? _tts;
   AudioPlayer? _audio;
+  StreamSubscription<Duration>? _position;
   http.Client? _request;
   Uint8List? _mp3;
   bool _playing = false, _busy = false;
   double _speed = 1;
   int _offset = 0, _session = 0;
-  String _status = 'Ready to read';
-  bool _error = false;
 
-  /// The voice reading now (or that read last), and why, when it's a fallback.
+  /// The word being spoken, when the device voice reports it.
+  BodySpan? _word;
+
+  /// How far through a generated MP3 playback is (Other API).
+  double _mp3Progress = 0;
+
+  /// What's happening right now, shown under the voice while busy.
+  String? _activity;
+
+  /// A problem the user should read; warnings (offline) aren't errors.
+  String? _notice;
+  bool _noticeIsError = false;
+
+  /// The voice reading now (or that read last), and why, if it's a fallback.
   VoiceSource? _source;
   String? _fallback;
 
@@ -88,25 +109,40 @@ class _ReaderScreenState extends State<ReaderScreen> {
   final _kokoroAudio = <String, Uint8List>{};
 
   bool get _locked => _playing || _busy;
+  bool get _hasText => _text.text.trim().isNotEmpty;
+  bool get _api => s.mode == ReadMode.api;
+  bool get _showReader => _hasText && (_locked || _offset > 0);
 
-  void _message(String message, {bool error = false}) {
+  void _activityIs(String? text) {
+    if (mounted) setState(() => _activity = text);
+  }
+
+  void _warn(String message, {bool error = false}) {
     if (mounted) {
       setState(() {
-        _status = message;
-        _error = error;
+        _notice = message;
+        _noticeIsError = error;
+        _activity = null;
       });
     }
   }
 
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   VoiceSource get _kokoroSource => VoiceSource(
-    Icons.graphic_eq,
+    Icons.graphic_eq_rounded,
     'Kokoro · ${s.kokoroVoice}',
-    'From your Kokoro server${s.kokoroHost.isEmpty ? '' : ', ${s.kokoroHost}'}',
+    s.kokoroHost.isEmpty ? 'Your Kokoro server' : 'From ${s.kokoroHost}',
   );
 
   VoiceSource get _deviceSource => VoiceSource(
-    Icons.phone_android,
-    'Device voice · ${s.deviceVoice ?? 'system default'}',
+    Icons.phone_android_rounded,
+    s.deviceVoice == null ? 'Device voice' : 'Device · ${s.deviceVoice}',
     kIsWeb ? 'From this browser' : 'From this device',
   );
 
@@ -124,6 +160,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
     ReadMode.auto => s.wouldUseKokoro ? _kokoroSource : _deviceSource,
   };
 
+  double get _deviceRate =>
+      (kIsWeb ? _speed : _speed * 0.5).clamp(0.1, kIsWeb ? 4.0 : 1.0);
+
+  void _setSpeed(double value) {
+    setState(() => _speed = value);
+    // Applies at once to Kokoro and MP3s; the device voice from its next part.
+    _audio?.setSpeed(value);
+    _tts?.setSpeechRate(_deviceRate);
+  }
+
   Future<void> _stop({bool reset = false}) async {
     _session++;
     _request?.close();
@@ -134,35 +180,47 @@ class _ReaderScreenState extends State<ReaderScreen> {
       setState(() {
         _playing = false;
         _busy = false;
+        _activity = null;
+        _word = null;
         if (reset) _offset = 0;
       });
     }
     await tts?.stop();
     await _audio?.pause();
-    _message(reset ? 'Ready to read' : 'Paused');
+  }
+
+  void _togglePlay() {
+    if (_locked) {
+      _stop();
+    } else if (_hasText) {
+      _api ? _playApi() : _readAloud();
+    }
   }
 
   /// Read aloud in the chosen mode. Automatic picks Kokoro when it answers,
   /// and the device voice when it doesn't.
   Future<void> _readAloud() async {
-    if (_text.text.trim().isEmpty) {
-      _message('Paste or import some text first.');
-      return;
-    }
-    _fallback = null;
+    if (!_hasText) return;
+    _screenFocus.requestFocus();
+    setState(() {
+      _fallback = null;
+      _notice = null;
+    });
     if (s.mode == ReadMode.device) return _readDevice();
     setState(() => _busy = true);
-    _message('Checking Kokoro…');
+    _activityIs('Checking Kokoro…');
     final status = await s.checkKokoro();
     if (!mounted) return;
     setState(() => _busy = false);
     if (status.isAvailable) return _readKokoro();
     if (s.mode == ReadMode.auto) {
-      _fallback =
-          'Kokoro isn’t available (${status.label}). Using the device voice.';
+      _fallback = 'Kokoro ${status.short.toLowerCase()}';
       return _readDevice();
     }
-    _message('Kokoro can’t read now: ${status.label}', error: true);
+    _warn(
+      'Kokoro can’t read right now: ${status.label}',
+      error: status.state == KokoroState.rejected,
+    );
   }
 
   Future<void> _readDevice() async {
@@ -171,21 +229,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _tts = tts;
     setState(() {
       _playing = true;
-      _error = false;
       _source = _deviceSource;
-      _status = 'Reading with the device voice';
+      _activity = null;
     });
     try {
       await tts.awaitSpeakCompletion(true);
-      await tts.setSpeechRate(
-        (kIsWeb ? _speed : _speed * 0.5).clamp(0.1, kIsWeb ? 4.0 : 1.0),
-      );
+      await tts.setSpeechRate(_deviceRate);
       // A fresh engine per session binds late callbacks to their original run.
       if (!mounted || session != _session) return;
       var from = _offset.clamp(0, _text.text.length);
       for (final chunk in chunkText(_text.text.substring(from))) {
         if (!mounted || session != _session) return;
         final start = from + chunk.start;
+        setState(() => _offset = start);
         tts.setProgressHandler((
           String _,
           int wordStart,
@@ -195,7 +251,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           if (mounted && session == _session) {
             setState(() {
               _offset = start + wordStart;
-              _status = 'Reading: $word';
+              _word = BodySpan(start + wordStart, start + wordEnd);
             });
           }
         });
@@ -212,14 +268,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
         setState(() {
           _playing = false;
           _offset = 0;
+          _word = null;
         });
-        _message('Finished reading');
+        _toast('Finished reading');
       }
     } catch (_) {
       if (mounted && session == _session) {
-        setState(() => _playing = false);
-        _message(
-          'The device voice is unavailable. Install a system voice, or pick another mode in Settings.',
+        setState(() {
+          _playing = false;
+          _word = null;
+        });
+        _warn(
+          'The device voice is unavailable. Install a system voice, or pick another voice.',
           error: true,
         );
       }
@@ -238,17 +298,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (chunks.isEmpty) {
       client.close();
       setState(() => _offset = 0);
-      _message('Finished reading');
       return;
     }
     final voice = s.kokoroVoice;
     final parts = <Uint8List>[];
     setState(() {
       _playing = true;
-      _error = false;
+      _busy = true;
       _source = _kokoroSource;
-      _status = 'Getting Kokoro audio…';
+      _word = null;
     });
+    _activityIs('Getting Kokoro audio…');
 
     Future<Uint8List> fetch(TextChunk chunk) {
       final key = '$voice\n${chunk.text}';
@@ -278,12 +338,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
         if (!mounted || session != _session) return;
         if (i + 1 < chunks.length) next = fetch(chunks[i + 1]);
         parts.add(bytes);
-        setState(() => _offset = from + chunks[i].start);
-        _message(
-          chunks.length == 1
-              ? 'Reading with Kokoro'
-              : 'Reading with Kokoro: part ${i + 1} of ${chunks.length}',
-        );
+        setState(() {
+          _offset = from + chunks[i].start;
+          _busy = false;
+          _activity = null;
+        });
         await player.setUrl(
           Uri.dataFromBytes(bytes, mimeType: 'audio/mpeg').toString(),
         );
@@ -299,40 +358,49 @@ class _ReaderScreenState extends State<ReaderScreen> {
           _offset = 0;
           if (from == 0) _mp3 = concatMp3(parts);
         });
-        _message(
+        _toast(
           from == 0
-              ? 'Finished reading · MP3 ready to export'
+              ? 'Finished · the MP3 is ready to export'
               : 'Finished reading',
         );
       }
     } catch (e) {
       if (!mounted || session != _session) return;
-      setState(() => _playing = false);
+      setState(() {
+        _playing = false;
+        _busy = false;
+      });
       final rejected =
           e is SpeechException && (e.status == 401 || e.status == 403);
       if (rejected) {
-        _message(
-          'Kokoro rejected the token. Check it in Settings.',
-          error: true,
-        );
+        _warn('Kokoro rejected the token. Check it in Settings.', error: true);
         return;
       }
       s.markKokoroOffline();
       if (s.mode == ReadMode.auto) {
-        _fallback =
-            'Kokoro stopped answering. Carrying on with the device voice.';
+        _fallback = 'Kokoro stopped answering';
         await _readDevice();
       } else {
-        _message(
-          'Could not reach Kokoro. Check the Mac is awake and online'
+        _warn(
+          'Can’t reach Kokoro. Check the Mac is awake and online'
           '${kIsWeb ? ', and that the server allows CORS' : ''}.',
-          error: true,
         );
       }
     } finally {
       client.close();
       if (_request == client) _request = null;
     }
+  }
+
+  /// Other API: generate the MP3 if there isn't one, then play it.
+  Future<void> _playApi() async {
+    _screenFocus.requestFocus();
+    setState(() {
+      _notice = null;
+      _fallback = null;
+    });
+    if (_mp3 == null) await _generate();
+    if (_mp3 != null && mounted) await _playMp3();
   }
 
   Future<void> _generate() async {
@@ -342,10 +410,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     setState(() {
       _busy = true;
       _mp3 = null;
-      _error = false;
-      _fallback = null;
       _source = _apiSource;
     });
+    _activityIs('Generating audio…');
     try {
       final bytes = await SpeechApi(client).generate(
         text: _text.text,
@@ -353,23 +420,21 @@ class _ReaderScreenState extends State<ReaderScreen> {
         apiKey: s.apiKey,
         model: s.apiModel,
         voice: s.apiVoice,
-        speed: _speed,
         onProgress: (done, total) {
-          if (session == _session) {
-            _message('Generating audio: $done of $total parts');
+          if (session == _session && total > 1) {
+            _activityIs('Generating audio · part ${done + 1} of $total');
           }
         },
       );
       if (!mounted || session != _session) return;
       setState(() => _mp3 = bytes);
-      _message('MP3 ready — play or export it below');
     } on SpeechException catch (e) {
-      if (session == _session) _message(e.message, error: true);
+      if (session == _session) _warn(e.message, error: e.status != null);
     } catch (_) {
       if (session == _session) {
-        _message(
-          'Could not reach the speech provider. Check your connection and endpoint; web providers must allow CORS.',
-          error: true,
+        _warn(
+          'Can’t reach the speech provider. Check your connection and endpoint'
+          '${kIsWeb ? '; web providers must allow CORS' : ''}.',
         );
       }
     } finally {
@@ -378,6 +443,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         setState(() {
           _busy = false;
           _request = null;
+          _activity = null;
         });
       }
     }
@@ -387,27 +453,34 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final session = ++_session;
     setState(() {
       _playing = true;
-      _error = false;
+      _mp3Progress = 0;
     });
     try {
+      await _position?.cancel();
       await _audio?.dispose();
       if (!mounted || session != _session) return;
       final player = AudioPlayer();
       _audio = player;
-      await player.setUrl(
+      final total = await player.setUrl(
         Uri.dataFromBytes(_mp3!, mimeType: 'audio/mpeg').toString(),
       );
+      await player.setSpeed(_speed);
+      _position = player.positionStream.listen((p) {
+        final ms = total?.inMilliseconds ?? 0;
+        if (mounted && ms > 0) {
+          setState(() => _mp3Progress = (p.inMilliseconds / ms).clamp(0, 1));
+        }
+      });
       if (!mounted || session != _session) return;
-      _message('Playing the MP3');
       await player.play();
       if (mounted && session == _session) {
         setState(() => _playing = false);
-        _message('Playback finished');
+        _toast('Finished playing');
       }
     } catch (_) {
       if (mounted && session == _session) {
         setState(() => _playing = false);
-        _message(
+        _warn(
           'Audio playback failed. You can still export the MP3.',
           error: true,
         );
@@ -415,8 +488,25 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
+  Future<void> _paste() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (!mounted) return;
+    if (text.isEmpty) {
+      _toast('The clipboard has no text');
+      return;
+    }
+    setState(() {
+      _text.text = text;
+      _offset = 0;
+      _mp3 = null;
+    });
+  }
+
   Future<void> _import() async {
+    if (_locked) await _stop();
     setState(() => _busy = true);
+    _activityIs('Opening the document…');
     try {
       final file = await const FileImporter().pick();
       if (file == null || !mounted) return;
@@ -428,37 +518,52 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _text.text = file.text.body;
         _offset = 0;
         _mp3 = null;
+        _notice = null;
       });
-      _message('Imported ${file.text.title}');
+      _toast('Imported ${file.text.title}');
     } on ImportException catch (e) {
-      _message(e.message, error: true);
+      _warn(e.message, error: true);
     } catch (_) {
-      _message(
+      _warn(
         'This file could not be read. Try a TXT, Markdown, PDF, or EPUB file.',
         error: true,
       );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _activity = null;
+        });
+      }
     }
   }
 
   Future<void> _export() async {
     try {
       final saved = await FilePicker.saveFile(
-        fileName: mp3FileName(_title.text),
+        fileName: mp3FileName(
+          _title.text.trim().isEmpty ? 'Voxen' : _title.text,
+        ),
         bytes: _mp3!,
         mimeType: 'audio/mpeg',
       );
-      if (saved != null) _message('MP3 exported');
+      if (saved != null) _toast('MP3 exported');
     } catch (_) {
-      _message('The MP3 could not be saved. Try again.', error: true);
+      _warn('The MP3 could not be saved. Try again.', error: true);
     }
   }
 
   void _invalidate() => setState(() {
     _mp3 = null;
     _offset = 0;
+    _word = null;
   });
+
+  void _clear() {
+    _text.clear();
+    _title.clear();
+    _invalidate();
+  }
 
   ReadMode? _lastMode;
 
@@ -469,6 +574,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
       if (_lastMode != null && _lastMode != s.mode) {
         _offset = 0;
         _mp3 = null;
+        _notice = null;
+        _fallback = null;
       }
       _lastMode = s.mode;
     });
@@ -478,8 +585,66 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (_locked) await _stop();
     if (!mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => SettingsScreen(settings: s)),
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            SettingsScreen(settings: s, appearance: widget.appearance),
+      ),
     );
+  }
+
+  Future<void> _openVoiceSheet() async {
+    if (_locked) await _stop();
+    if (!mounted) return;
+    s.checkKokoro();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            0,
+            AppSpacing.md,
+            AppSpacing.lg,
+          ),
+          child: ListenableBuilder(
+            listenable: s,
+            builder: (context, _) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.sm,
+                  ),
+                  child: Text('Voice', style: context.typography.title),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                ReadModePicker(settings: s),
+                const SizedBox(height: AppSpacing.sm),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(sheet).pop();
+                      _openSettings();
+                    },
+                    icon: const Icon(Icons.tune_rounded, size: 18),
+                    label: const Text('Voice settings'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _lastText = '';
+  void _textChanged() {
+    if (_text.text == _lastText) return;
+    _lastText = _text.text;
+    if (mounted) setState(() {});
   }
 
   @override
@@ -487,11 +652,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.initState();
     _lastMode = s.mode;
     s.addListener(_settingsChanged);
+    _text.addListener(_textChanged);
     _incoming.listen(_readIncoming);
   }
 
   /// Text selected in another app: load it and start reading right away,
-  /// except with Other API, which costs money and waits for Generate.
+  /// except with Other API, which costs money and waits for you.
   Future<void> _readIncoming(String text) async {
     if (!mounted) return;
     await _stop(reset: true);
@@ -502,11 +668,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _offset = 0;
       _mp3 = null;
     });
-    if (s.mode == ReadMode.api) {
-      _message('Text loaded — generate audio to listen');
-    } else {
-      await _readAloud();
-    }
+    if (!_api) await _readAloud();
   }
 
   @override
@@ -516,174 +678,168 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _session++;
     _request?.close();
     _tts?.stop();
+    _position?.cancel();
     _audio?.dispose();
     _text.dispose();
     _title.dispose();
+    _screenFocus.dispose();
     super.dispose();
+  }
+
+  String get _subtitle {
+    if (_activity != null) return _activity!;
+    final source = _locked && _source != null ? _source! : _nextSource;
+    return _fallback == null ? source.origin : '${source.origin} · $_fallback';
+  }
+
+  String? get _readerStatus {
+    final length = _text.text.length;
+    if (_api) return _playing ? 'Playing the MP3' : null;
+    if (length == 0) return null;
+    final pct = (_offset / length * 100).clamp(0, 100).round();
+    return _playing ? 'Reading · $pct%' : 'Paused · $pct%';
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final api = s.mode == ReadMode.api;
     final source = _locked && _source != null ? _source! : _nextSource;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Voxen'),
-        actions: [
-          IconButton(
-            tooltip: 'Settings',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: _openSettings,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 880),
-            child: ListView(
-              padding: const EdgeInsets.all(AppSpacing.xl),
+    final length = _text.text.length;
+    final progress = _api
+        ? _mp3Progress
+        : length == 0
+        ? 0.0
+        : (_offset / length).clamp(0.0, 1.0);
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter, control: true):
+            _togglePlay,
+        const SingleActivator(LogicalKeyboardKey.enter, meta: true):
+            _togglePlay,
+      },
+      child: Focus(
+        focusNode: _screenFocus,
+        autofocus: true,
+        child: Scaffold(
+          appBar: AppBar(
+            titleSpacing: AppSpacing.lg,
+            title: Row(
               children: [
-                Text(
-                  'Give your words a voice.',
-                  style: theme.textTheme.headlineMedium,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                const Text(
-                  'Paste text or bring a document. Listen at your own pace.',
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                _SourceCard(
-                  heading: _playing
-                      ? 'Reading with'
-                      : _busy
-                      ? 'Getting ready'
-                      : 'Will read with',
-                  source: source,
-                  mode: s.mode,
-                  note: _fallback,
-                  onChange: _locked ? null : _openSettings,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                TextField(
-                  controller: _title,
-                  enabled: !_locked,
-                  decoration: const InputDecoration(labelText: 'Reading title'),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                TextField(
-                  controller: _text,
-                  enabled: !_locked,
-                  minLines: 8,
-                  maxLines: 16,
-                  decoration: const InputDecoration(
-                    labelText: 'Text to read',
-                    hintText: 'Paste your article, notes, or story…',
-                    alignLabelWithHint: true,
-                  ),
-                  onChanged: (_) => _invalidate(),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Wrap(
-                  spacing: AppSpacing.md,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _locked ? null : _import,
-                      icon: const Icon(Icons.upload_file),
-                      label: const Text('Import document'),
-                    ),
-                    TextButton(
-                      onPressed: _locked
-                          ? null
-                          : () {
-                              _text.clear();
-                              _invalidate();
-                            },
-                      child: const Text('Clear text'),
-                    ),
-                  ],
-                ),
-                const Text('TXT · Markdown · PDF with text · EPUB'),
-                const SizedBox(height: AppSpacing.lg),
-                Text('Speed: ${_speed.toStringAsFixed(2)}×'),
-                Slider(
-                  value: _speed,
-                  min: 0.5,
-                  max: 2,
-                  divisions: 6,
-                  label: '${_speed.toStringAsFixed(2)}×',
-                  onChanged: _locked
-                      ? null
-                      : (v) {
-                          setState(() {
-                            _speed = v;
-                            if (api) _mp3 = null;
-                          });
-                        },
-                ),
-                Wrap(
-                  spacing: AppSpacing.md,
-                  runSpacing: AppSpacing.md,
-                  children: [
-                    if (!api)
-                      FilledButton.icon(
-                        onPressed: _locked ? null : _readAloud,
-                        icon: const Icon(Icons.volume_up),
-                        label: Text(
-                          _offset > 0 ? 'Resume reading' : 'Read aloud',
-                        ),
-                      )
-                    else ...[
-                      FilledButton.icon(
-                        onPressed: _locked ? null : _generate,
-                        icon: const Icon(Icons.graphic_eq),
-                        label: const Text('Generate MP3'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _locked || _mp3 == null ? null : _playMp3,
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Play MP3'),
-                      ),
-                    ],
-                    if (api || _mp3 != null)
-                      OutlinedButton.icon(
-                        onPressed: _locked || _mp3 == null ? null : _export,
-                        icon: const Icon(Icons.download),
-                        label: const Text('Export MP3'),
-                      ),
-                    if (_playing || (_busy && _request != null))
-                      OutlinedButton(
-                        onPressed: () => _stop(),
-                        child: Text(_busy ? 'Cancel' : 'Pause'),
-                      ),
-                    if (_offset > 0 && !_locked)
-                      TextButton(
-                        onPressed: () => _stop(reset: true),
-                        child: const Text('Start over'),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                if (_busy) const LinearProgressIndicator(),
-                const SizedBox(height: AppSpacing.sm),
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    _status,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: _error ? theme.colorScheme.error : null,
-                    ),
+                ClipRRect(
+                  borderRadius: AppRadius.smAll,
+                  child: Image.asset(
+                    'assets/branding/logo.png',
+                    width: 28,
+                    height: 28,
+                    excludeFromSemantics: true,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.xl),
-                const Text(
-                  'Documents and audio are not saved by Voxen. Export your MP3 before closing.',
-                ),
+                const SizedBox(width: AppSpacing.sm + AppSpacing.xxs),
+                const Text('Voxen'),
               ],
             ),
+            actions: [
+              IconButton(
+                tooltip: 'Import document',
+                onPressed: _locked ? null : _import,
+                icon: const Icon(Icons.file_open_outlined),
+              ),
+              IconButton(
+                tooltip: 'Settings',
+                onPressed: _openSettings,
+                icon: const Icon(Icons.settings_outlined),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+            ],
+          ),
+          body: Column(
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    final gutter = AppSpacing.gutter(box.maxWidth);
+                    final padding = EdgeInsets.fromLTRB(
+                      gutter,
+                      AppSpacing.md,
+                      gutter,
+                      AppSpacing.lg,
+                    );
+                    return Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: AppBreakpoints.readingMaxWidth + 2 * gutter,
+                        ),
+                        child: AnimatedSwitcher(
+                          duration: AppMotion.of(context, AppMotion.fast),
+                          child: _showReader
+                              ? ReadingView(
+                                  key: const ValueKey('reader'),
+                                  title: _title.text,
+                                  text: _text.text,
+                                  offset: _offset,
+                                  word: _word,
+                                  highlight: !_api,
+                                  status: _readerStatus,
+                                  onEdit: _locked
+                                      ? null
+                                      : () => _stop(reset: true),
+                                  padding: padding,
+                                )
+                              : _Editor(
+                                  key: const ValueKey('editor'),
+                                  title: _title,
+                                  text: _text,
+                                  enabled: !_locked,
+                                  padding: padding,
+                                  onPaste: _paste,
+                                  onImport: _import,
+                                  onChanged: _invalidate,
+                                ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              if (_notice != null)
+                NoticeBanner(
+                  message: _notice!,
+                  error: _noticeIsError,
+                  onDismiss: () => setState(() => _notice = null),
+                ),
+              PlayerBar(
+                source: source,
+                subtitle: _subtitle,
+                progress: progress,
+                playing: _playing,
+                busy: _busy,
+                playTooltip: _api
+                    ? (_mp3 == null ? 'Generate and play' : 'Play')
+                    : (_offset > 0 ? 'Resume' : 'Read aloud'),
+                onPlay: _hasText ? _togglePlay : null,
+                onPause: () => _stop(),
+                speed: _speed,
+                onSpeed: _setSpeed,
+                onVoiceTap: _openVoiceSheet,
+                actions: [
+                  PlayerAction(
+                    'Export MP3',
+                    Icons.download_rounded,
+                    _mp3 == null || _locked ? null : _export,
+                  ),
+                  PlayerAction(
+                    'Start over',
+                    Icons.replay_rounded,
+                    _offset > 0 && !_locked ? () => _stop(reset: true) : null,
+                  ),
+                  PlayerAction(
+                    'Clear text',
+                    Icons.delete_outline_rounded,
+                    _hasText && !_locked ? _clear : null,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -691,65 +847,108 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 }
 
-class _SourceCard extends StatelessWidget {
-  const _SourceCard({
-    required this.heading,
-    required this.source,
-    required this.mode,
-    required this.onChange,
-    this.note,
+/// Writing surface: a title, the text, and — while empty — the two ways in.
+class _Editor extends StatelessWidget {
+  const _Editor({
+    super.key,
+    required this.title,
+    required this.text,
+    required this.enabled,
+    required this.padding,
+    required this.onPaste,
+    required this.onImport,
+    required this.onChanged,
   });
-  final String heading;
-  final VoiceSource source;
-  final ReadMode mode;
-  final String? note;
-  final VoidCallback? onChange;
+
+  final TextEditingController title;
+  final TextEditingController text;
+  final bool enabled;
+  final EdgeInsets padding;
+  final VoidCallback onPaste;
+  final VoidCallback onImport;
+  final VoidCallback onChanged;
+
+  static const _plain = InputDecoration(
+    filled: false,
+    border: InputBorder.none,
+    enabledBorder: InputBorder.none,
+    focusedBorder: InputBorder.none,
+    disabledBorder: InputBorder.none,
+    contentPadding: EdgeInsets.zero,
+    isCollapsed: true,
+  );
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Semantics(
-          liveRegion: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '$heading · ${mode.label}',
-                      style: theme.textTheme.labelLarge,
-                    ),
-                  ),
-                  TextButton(onPressed: onChange, child: const Text('Change')),
-                ],
-              ),
-              Row(
-                children: [
-                  Icon(source.icon, color: theme.colorScheme.primary),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(source.title, style: theme.textTheme.titleMedium),
-                        Text(source.origin, style: theme.textTheme.bodySmall),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (note != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(note!, style: theme.textTheme.bodySmall),
-              ],
-            ],
+    final c = context.colors;
+    final t = context.typography;
+    final words = RegExp(r'\S+').allMatches(text.text).length;
+    final minutes = (words / 170).ceil();
+    return Padding(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: title,
+            enabled: enabled,
+            style: t.headline,
+            textInputAction: TextInputAction.next,
+            decoration: _plain.copyWith(
+              hintText: 'Untitled',
+              hintStyle: t.headline.copyWith(color: c.textTertiary),
+            ),
           ),
-        ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            words == 0
+                ? 'Paste or write something, then press play.'
+                : '$words ${words == 1 ? 'word' : 'words'} · about $minutes min to listen',
+            style: t.bodySmall.copyWith(color: c.textSecondary),
+          ),
+          if (words == 0) ...[
+            const SizedBox(height: AppSpacing.lg),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: enabled ? onPaste : null,
+                  icon: const Icon(Icons.content_paste_rounded, size: 18),
+                  label: const Text('Paste'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: enabled ? onImport : null,
+                  icon: const Icon(Icons.file_open_outlined, size: 18),
+                  label: const Text('Import document'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'TXT, Markdown, PDF with text or EPUB',
+              style: t.caption.copyWith(color: c.textTertiary),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.lg),
+          Expanded(
+            child: TextField(
+              controller: text,
+              enabled: enabled,
+              expands: true,
+              maxLines: null,
+              minLines: null,
+              textAlignVertical: TextAlignVertical.top,
+              keyboardType: TextInputType.multiline,
+              style: t.reading,
+              decoration: _plain.copyWith(
+                hintText: 'Text to read',
+                hintStyle: t.reading.copyWith(color: c.textTertiary),
+              ),
+              onChanged: (_) => onChanged(),
+            ),
+          ),
+        ],
       ),
     );
   }

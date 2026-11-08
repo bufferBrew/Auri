@@ -15,9 +15,16 @@ NeuroBrew without changing or removing NeuroBrew's reader.
   fell back if it did.
 - **Other API + MP3:** OpenAI (`tts-1`, `alloy`) or any HTTPS OpenAI-compatible
   endpoint, generated as an MP3 to play or export.
+- **A minimal reader:** a plain writing surface (title, text, word count and
+  listening time), and while reading, the text itself with the current sentence
+  and spoken word highlighted, scrolling along. A bottom player holds the voice,
+  speed (applies instantly), play/pause and a menu (export, start over, clear).
+  Ctrl/⌘+Enter plays and pauses.
+- **Colour themes:** Violet, Neon (matches the app icon), Ocean, Forest, Ember,
+  Rose and Graphite, each in light and dark, plus System/Light/Dark. Every
+  palette is tested to meet WCAG AA contrast (`test/palette_contrast_test.dart`).
 - Import TXT, Markdown, text-based PDF, and EPUB documents locally.
-- Speed control, device pause/resume, and long-text chunking.
-- Light/dark themes and an adaptive layout.
+- Pause/resume, long-text chunking, and a layout that adapts from phones to desktops.
 
 ## Run
 
@@ -84,9 +91,10 @@ browser, so use the Android app there.
    never sent to another.
 2. Enter a personal API key, model, and voice. Only use an endpoint you trust
    with that key and your text.
-3. Press **Generate MP3**. This sends the text to the provider and may incur
-   charges. Long documents require multiple requests.
-4. Press **Play MP3** or **Export MP3**.
+3. Press play. Voxen generates the MP3 first (this sends the text to the
+   provider and may incur charges; long documents need several requests), then
+   plays it. Speed is a playback setting, so the exported MP3 is at 1×.
+4. Export it from the player's menu.
 
 The API follows the [OpenAI speech contract](https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create).
 Other providers must implement that contract and return MP3 bytes. Web providers
