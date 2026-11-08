@@ -74,6 +74,56 @@ void main() {
     expect(find.text('Edit'), findsNothing, reason: 'still at the start');
   });
 
+  testWidgets('selected text from another app reads with the device voice', (
+    tester,
+  ) async {
+    final speaking = Completer<Object?>();
+    final spoken = <Object?>[];
+    tester.binding.defaultBinaryMessenger
+      ..setMockMethodCallHandler(const MethodChannel('flutter_tts'), (call) {
+        if (call.method != 'speak') return Future.value(1);
+        spoken.add(call.arguments);
+        return speaking.future;
+      })
+      ..setMockMethodCallHandler(
+        const MethodChannel('voxen/incoming_text'),
+        (call) async => call.method == 'takeText' ? 'Hello from Chrome.' : null,
+      );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger
+        ..setMockMethodCallHandler(const MethodChannel('flutter_tts'), null)
+        ..setMockMethodCallHandler(
+          const MethodChannel('voxen/incoming_text'),
+          null,
+        );
+    });
+    // Automatic, with Kokoro set up and answering: it still mustn't be used.
+    var kokoroSpeech = 0;
+    final s =
+        settings(
+            client: MockClient((request) async {
+              if (request.url.path.endsWith('/speech')) kokoroSpeech++;
+              return http.Response('{"voices":["af_heart"]}', 200);
+            }),
+          )
+          ..kokoroUrl = 'https://mac.example.ts.net'
+          ..kokoroToken = 'test-placeholder';
+    await tester.runAsync(() => s.checkKokoro());
+    expect(s.wouldUseKokoro, isTrue);
+
+    await tester.pumpWidget(VoxenApp(settings: s));
+    await tester.pumpAndSettle();
+    expect(find.text('Selected text'), findsOneWidget);
+    expect(find.text('Device voice'), findsOneWidget);
+    expect(
+      find.text('From this device · selected text uses the device voice'),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Pause'), findsOneWidget);
+    expect(spoken, isNotEmpty);
+    expect(kokoroSpeech, 0);
+  });
+
   testWidgets('the player names Kokoro and its server when it answers', (
     tester,
   ) async {

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'appearance_settings.dart';
+import 'features/read_aloud/data/incoming_text.dart';
 import 'core/theme/app_theme.dart';
 import 'speech_preset.dart';
 import 'ui/voice_widgets.dart';
@@ -142,7 +143,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           padding: const EdgeInsets.symmetric(
                             vertical: AppSpacing.sm,
                           ),
-                          child: ReadModePicker(settings: s),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              ReadModePicker(settings: s),
+                              if (IncomingText.supported)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    AppSpacing.lg,
+                                    AppSpacing.xs,
+                                    AppSpacing.lg,
+                                    AppSpacing.sm,
+                                  ),
+                                  child: Text(
+                                    'Text you select in other apps (“Read with Voxen”) always uses the device voice, so it starts at once.',
+                                    style: note,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                       _Section(

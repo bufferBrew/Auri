@@ -59,6 +59,10 @@ Settings → **Reading mode**:
 | Device voice only | The OS or browser voice | Asks you to install a system voice |
 | Other API · MP3 export | OpenAI or your endpoint, as an MP3 | Shows the provider's error |
 
+Text you select in another app ("Read with Voxen" in Android's selection menu,
+or Share) always reads with the device voice, whatever the mode, so it starts
+at once and never waits on Kokoro or spends on an API.
+
 Each mode shows its availability in Settings. Kokoro's is checked by asking the
 server for its voice list, at launch, when Settings opens, on **Check now**, and
 before reading (a result under a minute old is reused).

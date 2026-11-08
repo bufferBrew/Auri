@@ -21,7 +21,24 @@ import 'ui/reading_view.dart';
 import 'ui/voice_widgets.dart';
 import 'voice_settings.dart';
 
-void main() => runApp(const VoxenApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Load saved settings before the first frame, so the app opens in your
+  // theme and mode instead of flashing the defaults and switching (most
+  // visible when it opens straight from "Read with Voxen").
+  final store = DeviceSettingsStore();
+  final settings = VoiceSettings(store: store);
+  final appearance = AppearanceSettings(store: store);
+  try {
+    await Future.wait([
+      settings.load(),
+      appearance.load(),
+    ]).timeout(const Duration(seconds: 2));
+  } catch (_) {
+    // Slow or unreadable storage: open with what has loaded so far.
+  }
+  runApp(VoxenApp(settings: settings, appearance: appearance));
+}
 
 class VoxenApp extends StatefulWidget {
   const VoxenApp({super.key, this.settings, this.appearance});
@@ -570,8 +587,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _settingsChanged() {
     if (!mounted) return;
     setState(() {
-      // A different mode starts the reading over.
-      if (_lastMode != null && _lastMode != s.mode) {
+      // A different mode starts the reading over, but never mid-read: that
+      // would swap the reader for the editor under a voice still speaking.
+      if (_lastMode != null && _lastMode != s.mode && !_locked) {
         _offset = 0;
         _mp3 = null;
         _notice = null;
@@ -656,19 +674,33 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _incoming.listen(_readIncoming);
   }
 
-  /// Text selected in another app: load it and start reading right away,
-  /// except with Other API, which costs money and waits for you.
-  Future<void> _readIncoming(String text) async {
+  /// Text selected in another app ("Read with Voxen" or Share): read it at
+  /// once with the device voice, whatever the mode. A quick selection
+  /// shouldn't wait on Kokoro or spend on an API.
+  ///
+  /// Whatever was playing is cut off without a frame in between, so the
+  /// screen goes straight from one reading to the next.
+  void _readIncoming(String text) {
     if (!mounted) return;
-    await _stop(reset: true);
-    if (!mounted) return;
+    _session++;
+    _request?.close();
+    _request = null;
+    _tts?.stop();
+    _tts = null;
+    _audio?.pause();
     setState(() {
       _title.text = 'Selected text';
       _text.text = text.trim();
       _offset = 0;
       _mp3 = null;
+      _word = null;
+      _notice = null;
+      _activity = null;
+      _fallback = 'selected text uses the device voice';
+      _playing = false;
+      _busy = false;
     });
-    if (!_api) await _readAloud();
+    _readDevice();
   }
 
   @override
