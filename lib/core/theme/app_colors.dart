@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// Semantic colour tokens for Voxen.
+/// Semantic colour tokens for Auri.
 ///
 /// This is the **only** file in the app allowed to contain a raw hex literal.
-/// Colour themes are [AppPalette]s: each swaps the accent family (and, for
-/// Neon, the dark canvas) over the neutral light and dark sets below.
+/// Colour themes are [AppPalette]s: each swaps the accent family over the
+/// neutral light and dark sets below. Some also tint the dark canvas.
 /// Widgets and painters read `context.colors.<token>` instead.
 ///
 /// The identity is "study at night": a near-black ink canvas, a violet synapse
@@ -470,8 +470,20 @@ class _Canvas {
 const Color _ink = Color(0xFF0B0D12);
 const Color _white = Color(0xFFFFFFFF);
 
-/// Voxen's colour themes. Violet is the original; Neon matches the app icon.
+/// Auri's colour themes.
 enum AppPalette {
+  auri(
+    'Auri',
+    _Accent(Color(0xFF3450BC), Color(0xFF5128BD), Color(0xFFEDE6FF), _white),
+    _Accent(Color(0xFFACDFFF), Color(0xFFC3A6FF), Color(0xFF292052), _ink),
+    _Canvas(
+      background: Color(0xFF090C23),
+      surface: Color(0xFF111635),
+      surfaceElevated: Color(0xFF171D44),
+      surfaceMuted: Color(0xFF1D2450),
+      divider: Color(0xFF313A70),
+    ),
+  ),
   violet(
     'Violet',
     _Accent(Color(0xFF6D4AE0), Color(0xFF5B37D1), Color(0xFFEDE7FE), _white),

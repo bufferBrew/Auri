@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// The named motion system. Every animation in Voxen references one of
+/// The named motion system. Every animation in Auri references one of
 /// these — no magic millisecond literals in the UI.
 ///
 /// This app animates very little on purpose. The one motion that carries

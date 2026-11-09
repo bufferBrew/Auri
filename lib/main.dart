@@ -44,21 +44,21 @@ Future<void> main() async {
   } catch (_) {
     // Slow or unreadable storage: open with what has loaded so far.
   }
-  runApp(VoxenApp(settings: settings, appearance: appearance));
+  runApp(AuriApp(settings: settings, appearance: appearance));
 }
 
-class VoxenApp extends StatefulWidget {
-  const VoxenApp({super.key, this.settings, this.appearance});
+class AuriApp extends StatefulWidget {
+  const AuriApp({super.key, this.settings, this.appearance});
 
   /// Injected by tests; the app makes its own on the device.
   final VoiceSettings? settings;
   final AppearanceSettings? appearance;
 
   @override
-  State<VoxenApp> createState() => _VoxenAppState();
+  State<AuriApp> createState() => _AuriAppState();
 }
 
-class _VoxenAppState extends State<VoxenApp> {
+class _AuriAppState extends State<AuriApp> {
   late final _store = DeviceSettingsStore();
   late final VoiceSettings _settings =
       widget.settings ?? (VoiceSettings(store: _store)..load());
@@ -76,7 +76,7 @@ class _VoxenAppState extends State<VoxenApp> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: _appearance,
     builder: (context, _) => MaterialApp(
-      title: 'Voxen',
+      title: 'Auri',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.of(_appearance.palette, Brightness.light),
       darkTheme: AppTheme.of(_appearance.palette, Brightness.dark),
@@ -717,9 +717,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
       final saved = await FilePicker.saveFile(
         fileName: _mp3IsWav
             ? mp3FileName(
-                _title.text.trim().isEmpty ? 'Voxen' : _title.text,
+                _title.text.trim().isEmpty ? 'Auri' : _title.text,
               ).replaceFirst(RegExp(r'\.mp3$'), '.wav')
-            : mp3FileName(_title.text.trim().isEmpty ? 'Voxen' : _title.text),
+            : mp3FileName(_title.text.trim().isEmpty ? 'Auri' : _title.text),
         bytes: _mp3!,
         mimeType: _mp3IsWav ? 'audio/wav' : 'audio/mpeg',
       );
@@ -932,7 +932,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm + AppSpacing.xxs),
-                const Text('Voxen'),
+                const Text('Auri'),
               ],
             ),
             actions: [

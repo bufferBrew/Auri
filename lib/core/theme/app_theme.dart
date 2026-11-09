@@ -11,7 +11,7 @@ export 'app_motion.dart';
 export 'app_spacing.dart';
 export 'app_typography.dart';
 
-/// Voxen's theme.
+/// Auri's theme.
 ///
 /// The real design system lives in the [ThemeExtension]s ([AppColors],
 /// [AppTypography]) — widgets read `context.colors.surface` rather than
@@ -21,9 +21,9 @@ export 'app_typography.dart';
 abstract final class AppTheme {
   const AppTheme._();
 
-  static ThemeData get light => of(AppPalette.violet, Brightness.light);
+  static ThemeData get light => of(AppPalette.auri, Brightness.light);
 
-  static ThemeData get dark => of(AppPalette.violet, Brightness.dark);
+  static ThemeData get dark => of(AppPalette.auri, Brightness.dark);
 
   static ThemeData of(AppPalette palette, Brightness brightness) =>
       _build(AppColors.of(palette, brightness));
@@ -283,7 +283,7 @@ abstract final class AppTheme {
 /// `context.colors.accent`, `context.typography.reading`.
 ///
 /// Falls back to the **dark** token set when no theme extension is installed
-/// (a bare `MaterialApp` in a widget test, say) because dark is Voxen's
+/// (a bare `MaterialApp` in a widget test, say) because dark is Auri's
 /// primary mode — nothing ever crashes on a missing extension.
 extension AppThemeContext on BuildContext {
   ThemeData get _theme => Theme.of(this);

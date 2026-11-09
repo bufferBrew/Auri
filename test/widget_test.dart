@@ -30,7 +30,7 @@ void main() {
   testWidgets('empty reader offers Paste and Import, and play waits for text', (
     tester,
   ) async {
-    await tester.pumpWidget(VoxenApp(settings: settings()));
+    await tester.pumpWidget(AuriApp(settings: settings()));
     expect(find.text('Paste'), findsOneWidget);
     expect(find.text('Import document'), findsOneWidget);
     expect(find.text('Device voice'), findsOneWidget);
@@ -54,7 +54,7 @@ void main() {
       (call) => call.method == 'speak' ? speaking.future : Future.value(1),
     );
     await tester.pumpWidget(
-      VoxenApp(settings: settings(mode: ReadMode.device)),
+      AuriApp(settings: settings(mode: ReadMode.device)),
     );
     await tester.enterText(
       find.byType(TextField).last,
@@ -114,7 +114,7 @@ void main() {
     await tester.runAsync(() => s.checkKokoro());
     expect(s.wouldUseKokoro, isTrue);
 
-    await tester.pumpWidget(VoxenApp(settings: s));
+    await tester.pumpWidget(AuriApp(settings: s));
     await tester.pumpAndSettle();
     expect(find.text('Selected text'), findsOneWidget);
     expect(find.text('Device voice'), findsOneWidget);
@@ -139,7 +139,7 @@ void main() {
           )
           ..kokoroUrl = 'https://mac.example.ts.net'
           ..kokoroToken = 'test-placeholder';
-    await tester.pumpWidget(VoxenApp(settings: s));
+    await tester.pumpWidget(AuriApp(settings: s));
     await tester.runAsync(() => s.checkKokoro());
     await tester.pump();
     expect(find.text('Kokoro · af_heart'), findsOneWidget);
@@ -149,7 +149,7 @@ void main() {
   testWidgets('Other API generates on play, and export waits for audio', (
     tester,
   ) async {
-    await tester.pumpWidget(VoxenApp(settings: settings(mode: ReadMode.api)));
+    await tester.pumpWidget(AuriApp(settings: settings(mode: ReadMode.api)));
     expect(find.byTooltip('Generate and play'), findsOneWidget);
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
@@ -161,7 +161,7 @@ void main() {
 
   testWidgets('the voice sheet switches mode from the player', (tester) async {
     final s = settings();
-    await tester.pumpWidget(VoxenApp(settings: s));
+    await tester.pumpWidget(AuriApp(settings: s));
     await tester.tap(find.text('Device voice'));
     await tester.pumpAndSettle();
     expect(find.text('Voice'), findsOneWidget);
@@ -174,7 +174,7 @@ void main() {
     tester,
   ) async {
     final s = settings();
-    await tester.pumpWidget(VoxenApp(settings: s));
+    await tester.pumpWidget(AuriApp(settings: s));
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     final modes = find.byType(ReadModePicker);
@@ -206,7 +206,7 @@ void main() {
       }),
     );
     final s = VoiceSettings(store: MemorySettingsStore(), local: local);
-    await tester.pumpWidget(VoxenApp(settings: s));
+    await tester.pumpWidget(AuriApp(settings: s));
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     final download = find.widgetWithText(OutlinedButton, 'Download').first;
@@ -239,27 +239,30 @@ void main() {
     tester,
   ) async {
     final store = MemorySettingsStore();
+    await store.write('theme_palette', AppPalette.neon.name);
     final look = AppearanceSettings(store: store);
-    await tester.pumpWidget(VoxenApp(settings: settings(), appearance: look));
+    await look.load();
+    expect(look.palette, AppPalette.neon);
+    await tester.pumpWidget(AuriApp(settings: settings(), appearance: look));
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Dark'));
     await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsLabel('Neon colour'));
+    await tester.tap(find.bySemanticsLabel('Auri colour'));
     await tester.pumpAndSettle();
     expect(look.themeMode, ThemeMode.dark);
-    expect(look.palette, AppPalette.neon);
+    expect(look.palette, AppPalette.auri);
     final colors = Theme.of(
       tester.element(find.byType(SettingsScreen)),
     ).extension<AppColors>()!;
     expect(
       colors.background,
-      AppColors.of(AppPalette.neon, Brightness.dark).background,
+      AppColors.of(AppPalette.auri, Brightness.dark).background,
     );
     final reopened = AppearanceSettings(store: store);
     await reopened.load();
     expect(reopened.themeMode, ThemeMode.dark);
-    expect(reopened.palette, AppPalette.neon);
+    expect(reopened.palette, AppPalette.auri);
   });
 
   for (final screen in ['reader', 'settings']) {

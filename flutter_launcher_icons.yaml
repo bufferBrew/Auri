@@ -1,8 +1,8 @@
-# Canonical icon configuration; the artwork fills the platform mask.
+# Keep the soundwave centered inside adaptive launcher masks.
 flutter_launcher_icons:
   image_path: "assets/branding/app_icon.png"
   android: true
-  adaptive_icon_background: "#0B1440"
+  adaptive_icon_background: "#050507"
   adaptive_icon_foreground: "assets/branding/app_icon.png"
   adaptive_icon_foreground_inset: 12
   ios: false
@@ -10,8 +10,8 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: "assets/branding/app_icon.png"
-    background_color: "#0B1440"
-    theme_color: "#0B1440"
+    background_color: "#090C23"
+    theme_color: "#090C23"
   windows:
     generate: false
     icon_size: 256

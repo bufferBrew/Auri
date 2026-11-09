@@ -13,7 +13,7 @@ class AppearanceSettings extends ChangeNotifier {
   static const _paletteKey = 'theme_palette';
 
   ThemeMode _themeMode = ThemeMode.system;
-  AppPalette _palette = AppPalette.violet;
+  AppPalette _palette = AppPalette.auri;
 
   ThemeMode get themeMode => _themeMode;
   AppPalette get palette => _palette;
@@ -28,7 +28,7 @@ class AppearanceSettings extends ChangeNotifier {
       );
       _palette = AppPalette.values.firstWhere(
         (p) => p.name == palette,
-        orElse: () => AppPalette.violet,
+        orElse: () => AppPalette.auri,
       );
     } catch (_) {
       // Unreadable storage: keep the defaults.

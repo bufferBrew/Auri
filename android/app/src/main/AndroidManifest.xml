@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:allowBackup="false"
-        android:label="Voxen"
+        android:label="Auri"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -30,7 +30,7 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Voxen on the Share sheet for plain text. -->
+            <!-- Auri on the Share sheet for plain text. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -46,7 +46,7 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@style/ReadAloudTheme">
-            <intent-filter android:label="Voxen · Read aloud">
+            <intent-filter android:label="Auri · Read aloud">
                 <action android:name="android.intent.action.PROCESS_TEXT"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="text/plain"/>

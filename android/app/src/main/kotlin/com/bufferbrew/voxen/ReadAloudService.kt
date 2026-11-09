@@ -29,7 +29,7 @@ import io.flutter.plugin.common.MethodChannel
  * itself when it finishes, and the engine goes with it.
  *
  * Audio focus is left to the players: a focus request here would be taken
- * away by Voxen's own Kokoro player, and read as "stop".
+ * away by Auri's own Kokoro player, and read as "stop".
  */
 class ReadAloudService : Service() {
     private var engine: FlutterEngine? = null
@@ -72,7 +72,7 @@ class ReadAloudService : Service() {
             startEngine()
             send("read", incoming)
         } catch (e: Exception) {
-            Toast.makeText(this, "Voxen couldn’t start reading", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Auri couldn’t start reading", Toast.LENGTH_LONG).show()
             finishReading()
         }
         return START_NOT_STICKY

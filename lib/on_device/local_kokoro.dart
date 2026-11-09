@@ -20,7 +20,7 @@ import '../features/read_aloud/domain/text_chunk.dart';
 /// took 1.6 s with the full model and 6.1 s with the int8 one (6 threads):
 /// int8 is smaller but much slower on ARM, so the full model is the default.
 
-/// The models Voxen can download. Nothing downloads until the user asks.
+/// The models Auri can download. Nothing downloads until the user asks.
 enum LocalModel {
   full(
     label: 'Kokoro · full quality',
