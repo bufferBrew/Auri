@@ -4,14 +4,21 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'on_device/local_kokoro.dart';
+import 'on_device/local_models.dart';
 import 'speech_api.dart';
 import 'speech_preset.dart';
 
 /// How Voxen reads.
 enum ReadMode {
-  /// Kokoro when it answers, otherwise the device voice.
+  /// The Kokoro server and Kokoro on this phone, in the order the user
+  /// picked ([VoiceSettings.phoneFirst]; the server by default), then the
+  /// device voice.
   auto,
   kokoro,
+
+  /// Kokoro running on the phone itself (a downloaded model).
+  phone,
   device,
 
   /// OpenAI or another OpenAI-compatible endpoint, as a generated MP3.
@@ -21,11 +28,15 @@ enum ReadMode {
 extension ReadModeLabel on ReadMode {
   String get label => switch (this) {
     ReadMode.auto => 'Automatic',
-    ReadMode.kokoro => 'Kokoro only',
+    ReadMode.kokoro => 'Kokoro server only',
+    ReadMode.phone => 'Kokoro on this phone',
     ReadMode.device => 'Device voice only',
     ReadMode.api => 'Other API · MP3 export',
   };
 }
+
+/// What actually speaks.
+enum Engine { server, phone, device, api }
 
 enum KokoroState {
   notSetUp,
@@ -108,10 +119,17 @@ class VoiceSettings extends ChangeNotifier {
   VoiceSettings({
     required this.store,
     http.Client Function()? client,
+    LocalModels? local,
     this.checkTimeout = const Duration(seconds: 6),
-  }) : _client = client ?? http.Client.new;
+  }) : _client = client ?? http.Client.new,
+       local = local ?? LocalModels() {
+    this.local.addListener(notifyListeners);
+  }
 
   final SettingsStore store;
+
+  /// Kokoro models downloaded to the phone.
+  final LocalModels local;
   final http.Client Function() _client;
   final Duration checkTimeout;
 
@@ -157,11 +175,41 @@ class VoiceSettings extends ChangeNotifier {
   }
 
   /// Whether Kokoro or the device voice would read right now in [mode].
-  bool get wouldUseKokoro => switch (_mode) {
-    ReadMode.kokoro => true,
-    ReadMode.auto => kokoroStatus.isAvailable,
-    _ => false,
+  bool get wouldUseKokoro => nextEngine == Engine.server;
+
+  /// What the next reading would use in [mode], as far as is known now.
+  Engine get nextEngine => switch (_mode) {
+    ReadMode.kokoro => Engine.server,
+    ReadMode.phone => Engine.phone,
+    ReadMode.device => Engine.device,
+    ReadMode.api => Engine.api,
+    ReadMode.auto => switch ((
+      _phoneFirst,
+      local.installed != null,
+      kokoroStatus.isAvailable,
+    )) {
+      (true, true, _) => Engine.phone,
+      (_, _, true) => Engine.server,
+      (_, true, _) => Engine.phone,
+      _ => Engine.device,
+    },
   };
+
+  /// Whether Automatic tries Kokoro on this phone before the server.
+  bool get phoneFirst => _phoneFirst;
+  bool _phoneFirst = false;
+  static const _phoneFirstKey = 'phone_first';
+
+  set phoneFirst(bool value) {
+    if (value == _phoneFirst) return;
+    _phoneFirst = value;
+    notifyListeners();
+    unawaited(store.write(_phoneFirstKey, value ? 'true' : null));
+  }
+
+  /// Voices to pick from: the server's list, or the on-device model's.
+  List<String>? get voiceChoices =>
+      kokoroVoices ?? (local.installed != null ? localKokoroVoices : null);
 
   Future<void> load() async {
     try {
@@ -173,15 +221,23 @@ class VoiceSettings extends ChangeNotifier {
       _kokoroUrl = await store.read(_urlKey) ?? kokoroDefaultUrl;
       _kokoroVoice = await store.read(_voiceKey) ?? kokoroDefaultVoice;
       _remember = canRemember && await store.read(_rememberKey) == 'true';
+      _phoneFirst = await store.read(_phoneFirstKey) == 'true';
       if (_remember) _kokoroToken = await store.readSecret(_tokenKey) ?? '';
     } catch (_) {
       // Unreadable storage: start from the defaults, as on a first launch.
     }
     notifyListeners();
     unawaited(loadDeviceVoice());
+    if (LocalModels.supported) await local.refresh();
     if (_mode == ReadMode.auto || _mode == ReadMode.kokoro) {
       unawaited(checkKokoro());
     }
+  }
+
+  @override
+  void dispose() {
+    local.removeListener(notifyListeners);
+    super.dispose();
   }
 
   set mode(ReadMode value) {

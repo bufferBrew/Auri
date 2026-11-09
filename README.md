@@ -54,8 +54,9 @@ Settings → **Reading mode**:
 
 | Mode | Reads with | When it can't |
 |---|---|---|
-| Automatic (default) | Kokoro if it answers, else the device voice | Falls back to the device voice, also mid-reading |
-| Kokoro only | Kokoro | Shows why (offline, token rejected, not set up) |
+| Automatic (default) | The Kokoro server, then Kokoro on this phone, then the device voice (or the phone first, if you choose) | Falls to the next, also mid-reading |
+| Kokoro server only | Your Kokoro server | Shows why (offline, token rejected, not set up) |
+| Kokoro on this phone | A downloaded Kokoro model, on the phone itself (Android) | Asks you to download a model |
 | Device voice only | The OS or browser voice | Asks you to install a system voice |
 | Other API · MP3 export | OpenAI or your endpoint, as an MP3 | Shows the provider's error |
 
@@ -87,6 +88,35 @@ can be exported as an MP3.
 On web the server must answer CORS preflight requests; a token gate that rejects
 every request without the token (as Synapse's Caddy setup does) blocks the
 browser, so use the Android app there.
+
+### Kokoro on this phone
+
+Android only. Kokoro-82M v1.0 runs on the phone through
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx): no Mac, no connection,
+and the text never leaves the phone. Same 54 voices as the server.
+
+Nothing downloads on its own. Settings → **Voice models on this phone** lists
+two models with their sizes; each downloads only after you confirm, and can be
+cancelled or deleted:
+
+| Model | Download | On the phone | Speed (M1 Pro CPU, 6 threads) |
+|---|---|---|---|
+| Kokoro · full quality (recommended) | 333 MB | 395 MB | 9.4 s of speech in 2.0 s |
+| Kokoro · compact (int8) | 126 MB | 186 MB | 9.3 s of speech in 7.7 s |
+
+int8 is smaller but much slower on ARM CPUs, so the full model is the one to
+use on a recent phone. Pieces are made while the previous one plays, starting
+with a short one so the first audio comes quickly; a whole reading can be
+exported as WAV.
+
+Quality is close to the server: same model and voices. The server's text
+front end is better with numbers and abbreviations (it says "twenty
+twenty-six", the phone "two thousand twenty-six"). Voxen pins sherpa-onnx
+**1.13.8**: in 2.x the espeak-ng fallback was removed and Kokoro silently skips
+every word not in its lexicon, names and numbers included.
+
+`test/local_kokoro_live_test.dart` runs the real engine on a desktop host when
+pointed at an unpacked model (see the file).
 
 ### Other API
 

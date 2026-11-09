@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
+import '../on_device/local_kokoro.dart';
+import '../on_device/local_models.dart';
 import '../voice_settings.dart';
 
 enum Tone { neutral, good, warning, bad }
@@ -100,13 +102,58 @@ extension KokoroStatusUi on KokoroStatus {
 extension ReadModeUi on ReadMode {
   IconData get icon => switch (this) {
     ReadMode.auto => Icons.auto_awesome_rounded,
-    ReadMode.kokoro => Icons.graphic_eq_rounded,
+    ReadMode.kokoro => Icons.dns_outlined,
+    ReadMode.phone => Icons.memory_rounded,
     ReadMode.device => Icons.phone_android_rounded,
     ReadMode.api => Icons.cloud_outlined,
   };
 }
 
-/// The four reading modes, each with what it uses and whether it can read
+/// The on-device model's status, as a pill.
+StatusPill localModelPill(LocalModels local) {
+  final installed = local.installed;
+  if (installed != null) {
+    return StatusPill(
+      label: 'Ready · ${installed == LocalModel.full ? 'full' : 'compact'}',
+      icon: Icons.check_circle_rounded,
+      tone: Tone.good,
+    );
+  }
+  for (final m in LocalModel.values) {
+    final st = local.stateOf(m);
+    switch (st.phase) {
+      case LocalModelPhase.downloading:
+        final p = st.progress;
+        return StatusPill(
+          label: p == null
+              ? 'Downloading'
+              : 'Downloading ${(p * 100).round()}%',
+          icon: Icons.download_rounded,
+          busy: true,
+        );
+      case LocalModelPhase.unpacking:
+        return const StatusPill(
+          label: 'Unpacking',
+          icon: Icons.unarchive_outlined,
+          busy: true,
+        );
+      case LocalModelPhase.failed:
+        return const StatusPill(
+          label: 'Download failed',
+          icon: Icons.error_outline_rounded,
+          tone: Tone.bad,
+        );
+      case LocalModelPhase.absent || LocalModelPhase.ready:
+        break;
+    }
+  }
+  return const StatusPill(
+    label: 'Not downloaded',
+    icon: Icons.download_for_offline_outlined,
+  );
+}
+
+/// The reading modes, each with what it uses and whether it can read
 /// right now.
 class ReadModePicker extends StatelessWidget {
   const ReadModePicker({super.key, required this.settings, this.onPicked});
@@ -119,18 +166,24 @@ class ReadModePicker extends StatelessWidget {
     final s = settings;
     final kokoro = s.kokoroStatus;
     StatusPill pillFor(ReadMode mode) => switch (mode) {
-      ReadMode.auto =>
-        s.wouldUseKokoro
-            ? const StatusPill(
-                label: 'Using Kokoro',
-                icon: Icons.graphic_eq_rounded,
-                tone: Tone.good,
-              )
-            : const StatusPill(
-                label: 'Using this device',
-                icon: Icons.phone_android_rounded,
-              ),
+      ReadMode.auto => switch (s.nextEngine) {
+        Engine.phone => const StatusPill(
+          label: 'Using Kokoro on this phone',
+          icon: Icons.memory_rounded,
+          tone: Tone.good,
+        ),
+        Engine.server => const StatusPill(
+          label: 'Using the Kokoro server',
+          icon: Icons.dns_outlined,
+          tone: Tone.good,
+        ),
+        _ => const StatusPill(
+          label: 'Using this device',
+          icon: Icons.phone_android_rounded,
+        ),
+      },
       ReadMode.kokoro => kokoro.pill,
+      ReadMode.phone => localModelPill(s.local),
       ReadMode.device => const StatusPill(
         label: 'Available',
         icon: Icons.check_circle_rounded,
@@ -146,11 +199,16 @@ class ReadModePicker extends StatelessWidget {
               ),
     };
     String detail(ReadMode mode) => switch (mode) {
-      ReadMode.auto => 'Kokoro when it answers, otherwise this device.',
+      ReadMode.auto =>
+        'Kokoro on this phone, then the Kokoro server, then the device voice.',
       ReadMode.kokoro =>
         s.kokoroHost.isEmpty
             ? 'Your own Kokoro voice server.'
             : 'Your Kokoro server, ${s.kokoroHost}.',
+      ReadMode.phone =>
+        s.local.installed == null
+            ? 'Runs offline on the phone. Download a model in Settings first.'
+            : 'Runs offline on the phone; your text never leaves it.',
       ReadMode.device =>
         'The ${s.deviceVoice ?? 'system'} voice. Works offline.',
       ReadMode.api => 'OpenAI or your own endpoint, as an MP3.',
@@ -164,25 +222,26 @@ class ReadModePicker extends StatelessWidget {
       child: Column(
         children: [
           for (final mode in ReadMode.values)
-            RadioListTile<ReadMode>(
-              value: mode,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-              ),
-              secondary: Icon(mode.icon),
-              title: Text(mode.label),
-              subtitle: Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.xxs),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(detail(mode)),
-                    const SizedBox(height: AppSpacing.xs + AppSpacing.xxs),
-                    pillFor(mode),
-                  ],
+            if (mode != ReadMode.phone || LocalModels.supported)
+              RadioListTile<ReadMode>(
+                value: mode,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                ),
+                secondary: Icon(mode.icon),
+                title: Text(mode.label),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.xxs),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(detail(mode)),
+                      const SizedBox(height: AppSpacing.xs + AppSpacing.xxs),
+                      pillFor(mode),
+                    ],
+                  ),
                 ),
               ),
-            ),
         ],
       ),
     );

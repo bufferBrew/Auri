@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:voxen/appearance_settings.dart';
 import 'package:voxen/core/theme/app_theme.dart';
 import 'package:voxen/main.dart';
+import 'package:voxen/on_device/local_models.dart';
 import 'package:voxen/settings_screen.dart';
 import 'package:voxen/voice_settings.dart';
 
@@ -179,10 +181,53 @@ void main() {
     }
     expect(find.text('Not set up'), findsWidgets);
     expect(find.text('Using this device'), findsOneWidget);
+    await tester.ensureVisible(find.text('Device voice only'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Device voice only'));
     await tester.pumpAndSettle();
     expect(s.mode, ReadMode.device);
     expect(await (s.store as MemorySettingsStore).read('read_mode'), 'device');
+  });
+
+  testWidgets('a model downloads only after you agree to its size', (
+    tester,
+  ) async {
+    var requests = 0;
+    final local = LocalModels(
+      baseDir: () async => Directory.systemTemp,
+      client: () => MockClient((_) async {
+        requests++;
+        return http.Response('stop here', 404);
+      }),
+    );
+    final s = VoiceSettings(store: MemorySettingsStore(), local: local);
+    await tester.pumpWidget(VoxenApp(settings: s));
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    final download = find.widgetWithText(OutlinedButton, 'Download').first;
+    await tester.ensureVisible(download);
+    await tester.pumpAndSettle();
+    expect(find.text('333 MB download'), findsOneWidget);
+    expect(find.text('126 MB download'), findsOneWidget);
+
+    await tester.tap(download);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('This downloads 333 MB'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(requests, 0, reason: 'nothing downloads without a yes');
+
+    await tester.tap(download);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Download 333 MB'));
+    await tester.pump();
+    for (var i = 0; i < 20 && requests == 0; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+    }
+    expect(requests, 1);
   });
 
   testWidgets('appearance: dark mode and a colour theme apply and persist', (

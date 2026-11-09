@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'appearance_settings.dart';
 import 'features/read_aloud/data/incoming_text.dart';
+import 'on_device/local_kokoro.dart';
+import 'on_device/local_models.dart';
 import 'core/theme/app_theme.dart';
 import 'speech_preset.dart';
 import 'ui/voice_widgets.dart';
@@ -147,6 +149,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               ReadModePicker(settings: s),
+                              if (LocalModels.supported &&
+                                  s.mode == ReadMode.auto)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    AppSpacing.lg,
+                                    AppSpacing.sm,
+                                    AppSpacing.lg,
+                                    AppSpacing.sm,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Text(
+                                        'Automatic tries first',
+                                        style: t.label.copyWith(
+                                          color: c.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: AppSpacing.sm),
+                                      SegmentedButton<bool>(
+                                        showSelectedIcon: false,
+                                        segments: const [
+                                          ButtonSegment(
+                                            value: false,
+                                            icon: Icon(Icons.dns_outlined),
+                                            label: Text('Your Mac'),
+                                          ),
+                                          ButtonSegment(
+                                            value: true,
+                                            icon: Icon(Icons.memory_rounded),
+                                            label: Text('This phone'),
+                                          ),
+                                        ],
+                                        selected: {s.phoneFirst},
+                                        onSelectionChanged: (v) =>
+                                            s.phoneFirst = v.single,
+                                      ),
+                                      const SizedBox(height: AppSpacing.xs),
+                                      Text(
+                                        s.phoneFirst
+                                            ? 'This phone, then the Kokoro server, then the device voice.'
+                                            : 'The Kokoro server, then this phone, then the device voice.',
+                                        style: note,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               if (IncomingText.supported)
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(
@@ -246,7 +296,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   onChanged: (v) => s.rememberToken = v,
                                 ),
                               const SizedBox(height: AppSpacing.md),
-                              if (s.kokoroVoices case final voices?
+                              if (s.voiceChoices case final voices?
                                   when voices.isNotEmpty)
                                 DropdownButtonFormField<String>(
                                   key: ValueKey(voices),
@@ -285,6 +335,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                       ),
+                      if (LocalModels.supported)
+                        _Section(
+                          title: 'Voice models on this phone',
+                          child: _PhoneModels(local: s.local),
+                        ),
                       _Section(
                         title: 'Other API',
                         child: Theme(
@@ -509,6 +564,163 @@ class _Swatch extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The downloadable on-device models. Nothing downloads without a tap and a
+/// confirmation that names the size.
+class _PhoneModels extends StatelessWidget {
+  const _PhoneModels({required this.local});
+  final LocalModels local;
+
+  Future<void> _confirmDownload(BuildContext context, LocalModel m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('Download ${m.label}?'),
+        content: Text(
+          'This downloads ${m.downloadMb} MB from sherpa-onnx on GitHub and '
+          'uses ${m.diskMb} MB on the phone. Use Wi-Fi if your data is '
+          'limited. You can delete it here any time.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: Text('Download ${m.downloadMb} MB'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await local.download(m);
+  }
+
+  Future<void> _confirmDelete(BuildContext context, LocalModel m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('Delete ${m.label}?'),
+        content: Text('Frees ${m.diskMb} MB. You can download it again later.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Keep'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await local.delete(m);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final t = context.typography;
+    final note = t.bodySmall.copyWith(color: c.textSecondary);
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Kokoro running on the phone itself: no Mac, no connection, and '
+            'your text never leaves the phone. Same voices as the server. '
+            'Nothing downloads until you choose a model.',
+            style: note,
+          ),
+          for (final m in LocalModel.values) ...[
+            const SizedBox(height: AppSpacing.lg),
+            _modelRow(context, m, note),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _modelRow(BuildContext context, LocalModel m, TextStyle note) {
+    final t = context.typography;
+    final st = local.stateOf(m);
+    final busyHere =
+        st.phase == LocalModelPhase.downloading ||
+        st.phase == LocalModelPhase.unpacking;
+    final StatusPill pill = switch (st.phase) {
+      LocalModelPhase.ready => const StatusPill(
+        label: 'On this phone',
+        icon: Icons.check_circle_rounded,
+        tone: Tone.good,
+      ),
+      LocalModelPhase.downloading => StatusPill(
+        label: st.progress == null
+            ? 'Downloading'
+            : 'Downloading ${(st.progress! * 100).round()}%',
+        icon: Icons.download_rounded,
+        busy: true,
+      ),
+      LocalModelPhase.unpacking => const StatusPill(
+        label: 'Unpacking',
+        icon: Icons.unarchive_outlined,
+        busy: true,
+      ),
+      LocalModelPhase.failed => StatusPill(
+        label: st.error ?? 'Download failed',
+        icon: Icons.error_outline_rounded,
+        tone: Tone.bad,
+      ),
+      LocalModelPhase.absent => StatusPill(
+        label: '${m.downloadMb} MB download',
+        icon: Icons.download_for_offline_outlined,
+      ),
+    };
+    final Widget action = switch (st.phase) {
+      LocalModelPhase.ready => TextButton.icon(
+        onPressed: () => _confirmDelete(context, m),
+        icon: const Icon(Icons.delete_outline_rounded, size: 18),
+        label: const Text('Delete'),
+      ),
+      LocalModelPhase.downloading => TextButton(
+        onPressed: local.cancel,
+        child: const Text('Cancel'),
+      ),
+      LocalModelPhase.unpacking => const SizedBox.shrink(),
+      _ => OutlinedButton.icon(
+        onPressed: local.busy ? null : () => _confirmDownload(context, m),
+        icon: const Icon(Icons.download_rounded, size: 18),
+        label: Text(
+          st.phase == LocalModelPhase.failed ? 'Try again' : 'Download',
+        ),
+      ),
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(m.label, style: t.titleSmall),
+        const SizedBox(height: AppSpacing.xxs),
+        Text('${m.detail} ${m.diskMb} MB on the phone.', style: note),
+        const SizedBox(height: AppSpacing.sm),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Semantics(liveRegion: true, child: pill),
+            action,
+          ],
+        ),
+        if (busyHere) ...[
+          const SizedBox(height: AppSpacing.sm),
+          LinearProgressIndicator(
+            value: st.phase == LocalModelPhase.downloading ? st.progress : null,
+          ),
+        ],
+      ],
     );
   }
 }
