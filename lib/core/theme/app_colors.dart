@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 /// Semantic colour tokens for Voxen.
 ///
 /// This is the **only** file in the app allowed to contain a raw hex literal.
+/// Colour themes are [AppPalette]s: each swaps the accent family (and, for
+/// Neon, the dark canvas) over the neutral light and dark sets below.
 /// Widgets and painters read `context.colors.<token>` instead.
 ///
 /// The identity is "study at night": a near-black ink canvas, a violet synapse
@@ -257,6 +259,36 @@ class AppColors extends ThemeExtension<AppColors> {
     diagramGrid: Color(0xFFE3E5EF),
   );
 
+  /// The base set for [brightness] with [palette]'s accent family applied.
+  ///
+  /// Every palette was checked for WCAG AA: the light `accentStrong` clears
+  /// 6.3:1 on [background] and white text clears 6.7:1 on it; the dark
+  /// `accent` clears 7:1 on [background] and 5.5:1 on [surfaceMuted], with
+  /// [onAccent] at 7:1 or better. `test/palette_contrast_test.dart` keeps it so.
+  factory AppColors.of(AppPalette palette, Brightness brightness) {
+    final bool dark = brightness == Brightness.dark;
+    final AppColors base = dark ? AppColors.dark : AppColors.light;
+    final _Accent a = dark ? palette._dark : palette._light;
+    final AppColors tinted = base.copyWith(
+      accent: a.accent,
+      accentStrong: a.strong,
+      accentSubtle: a.subtle,
+      onAccent: a.onAccent,
+      diagramAccentBorder: a.accent,
+      diagramAccentFill: a.subtle,
+    );
+    final _Canvas? canvas = dark ? palette._darkCanvas : null;
+    if (canvas == null) return tinted;
+    return tinted.copyWith(
+      background: canvas.background,
+      surface: canvas.surface,
+      surfaceElevated: canvas.surfaceElevated,
+      surfaceMuted: canvas.surfaceMuted,
+      divider: canvas.divider,
+      onAccent: canvas.background,
+    );
+  }
+
   bool get isDark => brightness == Brightness.dark;
 
   @override
@@ -410,4 +442,83 @@ class AppColors extends ThemeExtension<AppColors> {
       diagramGrid: Color.lerp(diagramGrid, other.diagramGrid, t)!,
     );
   }
+}
+
+class _Accent {
+  const _Accent(this.accent, this.strong, this.subtle, this.onAccent);
+  final Color accent;
+  final Color strong;
+  final Color subtle;
+  final Color onAccent;
+}
+
+class _Canvas {
+  const _Canvas({
+    required this.background,
+    required this.surface,
+    required this.surfaceElevated,
+    required this.surfaceMuted,
+    required this.divider,
+  });
+  final Color background;
+  final Color surface;
+  final Color surfaceElevated;
+  final Color surfaceMuted;
+  final Color divider;
+}
+
+const Color _ink = Color(0xFF0B0D12);
+const Color _white = Color(0xFFFFFFFF);
+
+/// Voxen's colour themes. Violet is the original; Neon matches the app icon.
+enum AppPalette {
+  violet(
+    'Violet',
+    _Accent(Color(0xFF6D4AE0), Color(0xFF5B37D1), Color(0xFFEDE7FE), _white),
+    _Accent(Color(0xFFA78BFA), Color(0xFFA78BFA), Color(0xFF251E3D), _ink),
+  ),
+  neon(
+    'Neon',
+    _Accent(Color(0xFF0E7490), Color(0xFF0B6077), Color(0xFFDDF3F9), _white),
+    _Accent(Color(0xFF4FD8F0), Color(0xFF4FD8F0), Color(0xFF0F3247), _ink),
+    _Canvas(
+      background: Color(0xFF070D24),
+      surface: Color(0xFF0E1633),
+      surfaceElevated: Color(0xFF131D40),
+      surfaceMuted: Color(0xFF18234B),
+      divider: Color(0xFF22305E),
+    ),
+  ),
+  ocean(
+    'Ocean',
+    _Accent(Color(0xFF2563EB), Color(0xFF1D4ED8), Color(0xFFE1EAFE), _white),
+    _Accent(Color(0xFF7AB4FF), Color(0xFF7AB4FF), Color(0xFF16284A), _ink),
+  ),
+  forest(
+    'Forest',
+    _Accent(Color(0xFF15803D), Color(0xFF166534), Color(0xFFDCF5E3), _white),
+    _Accent(Color(0xFF5BD58C), Color(0xFF5BD58C), Color(0xFF12301E), _ink),
+  ),
+  ember(
+    'Ember',
+    _Accent(Color(0xFFC2410C), Color(0xFF9A3412), Color(0xFFFDE9DC), _white),
+    _Accent(Color(0xFFFB923C), Color(0xFFFB923C), Color(0xFF3A1E0C), _ink),
+  ),
+  rose(
+    'Rose',
+    _Accent(Color(0xFFBE185D), Color(0xFF9D174D), Color(0xFFFCE4EF), _white),
+    _Accent(Color(0xFFF472B6), Color(0xFFF472B6), Color(0xFF3A1428), _ink),
+  ),
+  graphite(
+    'Graphite',
+    _Accent(Color(0xFF3F3F46), Color(0xFF27272A), Color(0xFFE8E8EC), _white),
+    _Accent(Color(0xFFE4E4E7), Color(0xFFE4E4E7), Color(0xFF26272D), _ink),
+  );
+
+  const AppPalette(this.label, this._light, this._dark, [this._darkCanvas]);
+
+  final String label;
+  final _Accent _light;
+  final _Accent _dark;
+  final _Canvas? _darkCanvas;
 }

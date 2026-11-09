@@ -5,8 +5,11 @@ import 'features/read_aloud/domain/text_chunk.dart';
 import 'mp3.dart';
 
 class SpeechException implements Exception {
-  const SpeechException(this.message);
+  const SpeechException(this.message, {this.status});
   final String message;
+
+  /// The HTTP status behind the error, when the server answered at all.
+  final int? status;
   @override
   String toString() => message;
 }
@@ -64,7 +67,7 @@ class SpeechApi {
           _ =>
             'Speech generation failed (HTTP ${response.statusCode}). Check your endpoint, model, and voice.',
         };
-        throw SpeechException(message);
+        throw SpeechException(message, status: response.statusCode);
       }
       if (!_isMp3(response.bodyBytes)) {
         throw const SpeechException(
@@ -106,7 +109,10 @@ class SpeechApi {
       return http.Response.fromStream(streamed);
     })().timeout(const Duration(seconds: 20));
     if (response.statusCode == 401 || response.statusCode == 403) {
-      throw const SpeechException('The server rejected this key.');
+      throw SpeechException(
+        'The server rejected this key.',
+        status: response.statusCode,
+      );
     }
     if (response.statusCode != 200) {
       throw SpeechException(

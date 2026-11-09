@@ -21,9 +21,12 @@ export 'app_typography.dart';
 abstract final class AppTheme {
   const AppTheme._();
 
-  static ThemeData get light => _build(AppColors.light);
+  static ThemeData get light => of(AppPalette.violet, Brightness.light);
 
-  static ThemeData get dark => _build(AppColors.dark);
+  static ThemeData get dark => of(AppPalette.violet, Brightness.dark);
+
+  static ThemeData of(AppPalette palette, Brightness brightness) =>
+      _build(AppColors.of(palette, brightness));
 
   static ThemeData _build(AppColors colors) {
     final AppTypography typography = AppTypography.standard(colors.text);
@@ -225,6 +228,43 @@ abstract final class AppTheme {
           color: colors.textSecondary,
         ),
         shape: const RoundedRectangleBorder(borderRadius: AppRadius.mdAll),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colors.surfaceElevated,
+        surfaceTintColor: Colors.transparent,
+        modalBarrierColor: colors.scrim,
+        showDragHandle: true,
+        dragHandleColor: colors.textTertiary,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.xl),
+          ),
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: SegmentedButton.styleFrom(
+          selectedBackgroundColor: colors.accentSubtle,
+          selectedForegroundColor: colors.accentStrong,
+          foregroundColor: colors.textSecondary,
+          side: BorderSide(color: colors.divider),
+          textStyle: typography.label,
+          minimumSize: const Size(0, AppSpacing.minTapTarget),
+        ),
+      ),
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(colors.surfaceElevated),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          side: WidgetStatePropertyAll(BorderSide(color: colors.divider)),
+          shape: const WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: AppRadius.mdAll),
+          ),
+        ),
+      ),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: colors.accentStrong,
+        inactiveTrackColor: colors.surfaceMuted,
+        thumbColor: colors.accentStrong,
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(

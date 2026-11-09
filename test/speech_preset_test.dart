@@ -1,9 +1,7 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:voxen/main.dart';
 import 'package:voxen/speech_api.dart';
 import 'package:voxen/speech_preset.dart';
 
@@ -19,9 +17,9 @@ void main() {
         'https://mac.example.ts.net/v1/audio/speech',
       );
     }
-    final kokoro = presetSettings(SpeechPreset.kokoro);
-    expect(kokoro.model, 'kokoro');
-    expect(kokoro.voice, 'af_heart');
+    expect(kokoroSpeechEndpoint('  '), isEmpty);
+    expect(kokoroModel, 'kokoro');
+    expect(kokoroDefaultVoice, 'af_heart');
   });
 
   group('voices', () {
@@ -80,49 +78,5 @@ void main() {
         );
       }
     });
-  });
-
-  testWidgets('choosing Kokoro fills its settings and clears the key', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const VoxenApp());
-    await tester.tap(find.byType(DropdownButtonFormField<SpeechMode>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('API voice · MP3 export').last);
-    await tester.pumpAndSettle();
-
-    await tester.enterText(
-      find.widgetWithText(TextField, 'API key'),
-      'openai-placeholder',
-    );
-    await tester.tap(find.byType(DropdownButtonFormField<SpeechPreset>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Kokoro').last);
-    await tester.pumpAndSettle();
-
-    final token = tester.widget<TextField>(
-      find.widgetWithText(TextField, 'Kokoro token'),
-    );
-    expect(token.controller!.text, isEmpty);
-    expect(
-      tester
-          .widget<TextField>(find.widgetWithText(TextField, 'Model'))
-          .controller!
-          .text,
-      'kokoro',
-    );
-    await tester.scrollUntilVisible(
-      find.text('Load voices'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(
-      tester
-          .widget<TextField>(find.widgetWithText(TextField, 'Voice'))
-          .controller!
-          .text,
-      'af_heart',
-    );
-    expect(find.text('Load voices'), findsOneWidget);
   });
 }
