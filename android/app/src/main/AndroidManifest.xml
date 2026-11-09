@@ -1,5 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- "Read aloud" reads in the background with a Stop notification. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:allowBackup="false"
         android:label="Voxen"
@@ -26,12 +30,6 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- "Voxen" in other apps' text-selection menu. -->
-            <intent-filter android:label="Read with Voxen">
-                <action android:name="android.intent.action.PROCESS_TEXT"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="text/plain"/>
-            </intent-filter>
             <!-- Voxen on the Share sheet for plain text. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
@@ -39,6 +37,25 @@
                 <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
+        <!-- "Read aloud" in other apps' text-selection menu. It has no screen:
+             it reads (Kokoro or the device voice) while that app stays in front. -->
+        <activity
+            android:name=".ReadAloudActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/ReadAloudTheme">
+            <intent-filter android:label="Voxen · Read aloud">
+                <action android:name="android.intent.action.PROCESS_TEXT"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+        </activity>
+        <service
+            android:name=".ReadAloudService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

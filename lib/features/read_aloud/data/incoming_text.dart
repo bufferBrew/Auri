@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Text another Android app sent to Voxen, from its text-selection menu
-/// ("Read with Voxen") or the Share sheet. See `MainActivity.kt`.
+/// Text another Android app shared to Voxen. See `MainActivity.kt`.
+/// ("Read aloud" in the selection menu doesn't come here: it reads natively,
+/// see `ReadAloudActivity.kt`.)
 class IncomingText {
   IncomingText({MethodChannel? channel})
     : _channel = channel ?? const MethodChannel('voxen/incoming_text');

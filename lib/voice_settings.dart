@@ -38,6 +38,25 @@ extension ReadModeLabel on ReadMode {
 /// What actually speaks.
 enum Engine { server, phone, device, api }
 
+/// What "Read aloud" in other apps' selection menu reads with.
+enum SelectionVoice {
+  /// Kokoro on the Mac, then Kokoro on this phone, then the device voice:
+  /// the first that's set up and answers.
+  auto,
+  server,
+  phone,
+  device,
+}
+
+extension SelectionVoiceLabel on SelectionVoice {
+  String get label => switch (this) {
+    SelectionVoice.auto => 'Fastest available',
+    SelectionVoice.server => 'Kokoro server',
+    SelectionVoice.phone => 'Kokoro on this phone',
+    SelectionVoice.device => 'Device voice',
+  };
+}
+
 enum KokoroState {
   notSetUp,
   needsToken,
@@ -207,6 +226,44 @@ class VoiceSettings extends ChangeNotifier {
     unawaited(store.write(_phoneFirstKey, value ? 'true' : null));
   }
 
+  /// What "Read aloud" in other apps uses; the fastest available by default.
+  /// It runs without the app open, so the Kokoro server is only used when
+  /// the token is remembered.
+  SelectionVoice get selectionVoice => _selectionVoice;
+  SelectionVoice _selectionVoice = SelectionVoice.auto;
+  static const _selectionVoiceKey = 'selection_voice';
+
+  set selectionVoice(SelectionVoice value) {
+    if (value == _selectionVoice) return;
+    _selectionVoice = value;
+    notifyListeners();
+    unawaited(store.write(_selectionVoiceKey, value.name));
+  }
+
+  /// The voices "Read aloud" tries, in order, for [selectionVoice]: each
+  /// Kokoro only if it's set up, and the device voice always last, so a
+  /// selection is never left unread.
+  List<Engine> get selectionOrder {
+    final server = selectionCanUseServer;
+    final phone = local.installed != null;
+    return [
+      if (server &&
+          (_selectionVoice == SelectionVoice.auto ||
+              _selectionVoice == SelectionVoice.server))
+        Engine.server,
+      if (phone &&
+          (_selectionVoice == SelectionVoice.auto ||
+              _selectionVoice == SelectionVoice.phone))
+        Engine.phone,
+      Engine.device,
+    ];
+  }
+
+  /// "Read aloud" runs without the app, so it has the Kokoro token only when
+  /// it's remembered on the device.
+  bool get selectionCanUseServer =>
+      kokoroEndpoint.isNotEmpty && _kokoroToken.isNotEmpty && _remember;
+
   /// Voices to pick from: the server's list, or the on-device model's.
   List<String>? get voiceChoices =>
       kokoroVoices ?? (local.installed != null ? localKokoroVoices : null);
@@ -222,6 +279,11 @@ class VoiceSettings extends ChangeNotifier {
       _kokoroVoice = await store.read(_voiceKey) ?? kokoroDefaultVoice;
       _remember = canRemember && await store.read(_rememberKey) == 'true';
       _phoneFirst = await store.read(_phoneFirstKey) == 'true';
+      final selection = await store.read(_selectionVoiceKey);
+      _selectionVoice = SelectionVoice.values.firstWhere(
+        (v) => v.name == selection,
+        orElse: () => SelectionVoice.auto,
+      );
       if (_remember) _kokoroToken = await store.readSecret(_tokenKey) ?? '';
     } catch (_) {
       // Unreadable storage: start from the defaults, as on a first launch.

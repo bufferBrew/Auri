@@ -197,23 +197,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ],
                                   ),
                                 ),
-                              if (IncomingText.supported)
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (IncomingText.supported)
+                        _Section(
+                          title: 'Read aloud in other apps',
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AppSpacing.sm,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     AppSpacing.lg,
                                     AppSpacing.xs,
                                     AppSpacing.lg,
-                                    AppSpacing.sm,
+                                    AppSpacing.xs,
                                   ),
                                   child: Text(
-                                    'Text you select in other apps (“Read with Voxen”) always uses the device voice, so it starts at once.',
+                                    'Select text in any app and tap “Voxen · Read aloud” (often under ⋮). Voxen reads it without opening; the notification shows the voice, with Stop and Device voice.',
                                     style: note,
                                   ),
                                 ),
-                            ],
+                                SelectionVoicePicker(settings: s),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                       _Section(
                         title: 'Kokoro',
                         child: Padding(

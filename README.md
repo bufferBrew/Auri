@@ -60,9 +60,27 @@ Settings → **Reading mode**:
 | Device voice only | The OS or browser voice | Asks you to install a system voice |
 | Other API · MP3 export | OpenAI or your endpoint, as an MP3 | Shows the provider's error |
 
-Text you select in another app ("Read with Voxen" in Android's selection menu,
-or Share) always reads with the device voice, whatever the mode, so it starts
-at once and never waits on Kokoro or spends on an API.
+**Voxen · Read aloud** in Android's text-selection menu (often under ⋮; the
+plain "Read aloud" next to Copy is Android's own Select to Speak) reads the
+selection without opening Voxen: the app you selected in stays in front. The
+voice is set in Settings → *Read aloud in other apps*:
+
+| Choice | Reads with |
+|---|---|
+| Fastest available (default) | The Kokoro server if it answers within 10 s, then Kokoro on this phone, then the device voice |
+| Kokoro server | The Kokoro server, else the device voice |
+| Kokoro on this phone | The downloaded model, else the device voice |
+| Device voice | The device voice |
+
+A "Reading aloud" notification names the voice (and why, after a fallback)
+and has **Stop** and **Device voice**, which carries on from the same place.
+Selecting new text replaces the reading. It runs without the app, so it can
+use the Kokoro server only when the token is remembered. Under the hood a
+background Flutter engine (`ReadAloudService.kt` →
+`lib/features/read_aloud/selection_reader.dart`) runs the same Dart voices as
+the app.
+
+Text shared to Voxen (Share) opens the app and reads with the device voice.
 
 Each mode shows its availability in Settings. Kokoro's is checked by asking the
 server for its voice list, at launch, when Settings opens, on **Check now**, and

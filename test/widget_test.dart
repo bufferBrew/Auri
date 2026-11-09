@@ -10,6 +10,7 @@ import 'package:voxen/core/theme/app_theme.dart';
 import 'package:voxen/main.dart';
 import 'package:voxen/on_device/local_models.dart';
 import 'package:voxen/settings_screen.dart';
+import 'package:voxen/ui/voice_widgets.dart';
 import 'package:voxen/voice_settings.dart';
 
 VoiceSettings settings({ReadMode mode = ReadMode.auto, http.Client? client}) =>
@@ -176,8 +177,12 @@ void main() {
     await tester.pumpWidget(VoxenApp(settings: s));
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
+    final modes = find.byType(ReadModePicker);
     for (final mode in ReadMode.values) {
-      expect(find.text(mode.label), findsOneWidget);
+      expect(
+        find.descendant(of: modes, matching: find.text(mode.label)),
+        findsOneWidget,
+      );
     }
     expect(find.text('Not set up'), findsWidgets);
     expect(find.text('Using this device'), findsOneWidget);

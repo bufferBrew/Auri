@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
+import '../features/read_aloud/domain/text_chunk.dart';
+
 /// Kokoro-82M running on the phone, through sherpa-onnx.
 ///
 /// Two builds of Kokoro v1.0, with the same 54 voices as a Kokoro-FastAPI
@@ -95,6 +97,27 @@ int localKokoroSpeaker(String voice) {
 /// audio starts within a second or two on a phone.
 const localKokoroFirstChars = 160;
 const localKokoroChunkChars = 400;
+
+/// [text] in pieces for the phone: a short first one so audio starts
+/// quickly, then [localKokoroChunkChars] at a time.
+List<TextChunk> phoneChunks(String text) {
+  final first = chunkText(text, maxChars: localKokoroFirstChars);
+  if (first.isEmpty) return first;
+  final head = first.first;
+  return [
+    head,
+    for (final c in chunkText(
+      text.substring(head.end),
+      maxChars: localKokoroChunkChars,
+    ))
+      TextChunk(
+        index: c.index + 1,
+        start: head.end + c.start,
+        end: head.end + c.end,
+        text: c.text,
+      ),
+  ];
+}
 
 /// 16-bit mono PCM WAV from float samples in [-1, 1].
 Uint8List encodeWav(Float32List samples, int sampleRate) {
