@@ -14,7 +14,7 @@ import '../../voice_settings.dart';
 import 'domain/text_chunk.dart';
 
 /// Reads text selected in another app ("Read aloud" in its selection menu)
-/// without Voxen's screen. It runs in a background Flutter engine that
+/// without Auri's screen. It runs in a background Flutter engine that
 /// `ReadAloudService.kt` starts, and talks to it over `voxen/read_aloud`.
 ///
 /// It tries the voices in [VoiceSettings.selectionOrder] (the Kokoro server,

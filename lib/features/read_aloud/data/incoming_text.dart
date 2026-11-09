@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Text another Android app shared to Voxen. See `MainActivity.kt`.
+/// Text another Android app shared to Auri. See `MainActivity.kt`.
 /// ("Read aloud" in the selection menu doesn't come here: it reads natively,
 /// see `ReadAloudActivity.kt`.)
 class IncomingText {

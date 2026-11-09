@@ -219,7 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     AppSpacing.xs,
                                   ),
                                   child: Text(
-                                    'Select text in any app and tap “Voxen · Read aloud” (often under ⋮). Voxen reads it without opening; the notification shows the voice, with Stop and Device voice.',
+                                    'Select text in any app and tap “Auri · Read aloud” (often under ⋮). Auri reads it without opening; the notification shows the voice, with Stop and Device voice.',
                                     style: note,
                                   ),
                                 ),
@@ -304,7 +304,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     'Remember token on this device',
                                   ),
                                   subtitle: const Text(
-                                    'Kept in Android’s encrypted storage. Off: forgotten when you close Voxen.',
+                                    'Kept in Android’s encrypted storage. Off: forgotten when you close Auri.',
                                   ),
                                   value: s.rememberToken,
                                   onChanged: (v) => s.rememberToken = v,
@@ -438,7 +438,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: AppSpacing.xl),
                       Text(
-                        'Voxen · a Brew app',
+                        'Auri · a Brew app',
                         textAlign: TextAlign.center,
                         style: t.caption.copyWith(color: c.textTertiary),
                       ),

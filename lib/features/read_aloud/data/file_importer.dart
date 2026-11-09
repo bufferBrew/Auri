@@ -69,7 +69,7 @@ class FileImporter {
           kind: ImportKind.pdf,
         );
       default:
-        throw ImportException('Voxen cannot read .$ext files yet.');
+        throw ImportException('Auri cannot read .$ext files yet.');
     }
   }
 

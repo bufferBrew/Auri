@@ -28,7 +28,7 @@ class ReadAloudActivity : Activity() {
         val text = intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)
             ?.toString()?.trim().orEmpty()
         if (text.isNotEmpty() && !ReadAloudService.read(this, text)) {
-            // Android refused the background reader: open Voxen with the text.
+            // Android refused the background reader: open Auri with the text.
             startActivity(
                 Intent(this, MainActivity::class.java)
                     .setAction(Intent.ACTION_SEND)

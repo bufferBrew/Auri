@@ -1,11 +1,11 @@
-# Voxen
+# Auri
 
-Voxen · a Brew app (VoiceBrew until 2026-11-07).
+Auri · a Brew app, formerly Voxen and VoiceBrew.
 
 A standalone Flutter text-to-speech app for Android and web, extracted from
 NeuroBrew without changing or removing NeuroBrew's reader.
 
-- **Automatic voice:** press Read aloud and Voxen reads with your Kokoro server
+- **Automatic voice:** press Read aloud and Auri reads with your Kokoro server
   when it answers, and with the device's own voice when it doesn't (or before
   you've set it up). No account or backend; works offline with a device voice.
 - **Settings** (gear icon): choose Automatic, Kokoro only, Device voice only, or
@@ -20,8 +20,9 @@ NeuroBrew without changing or removing NeuroBrew's reader.
   and spoken word highlighted, scrolling along. A bottom player holds the voice,
   speed (applies instantly), play/pause and a menu (export, start over, clear).
   Ctrl/⌘+Enter plays and pauses.
-- **Colour themes:** Violet, Neon (matches the app icon), Ocean, Forest, Ember,
-  Rose and Graphite, each in light and dark, plus System/Light/Dark. Every
+- **Colour themes:** Auri (the default), Violet, Neon, Ocean, Forest, Ember, Rose
+  and Graphite. The Auri theme takes its navy, violet and ice blue from the icon.
+  Each palette supports System, Light and Dark modes. Every
   palette is tested to meet WCAG AA contrast (`test/palette_contrast_test.dart`).
 - Import TXT, Markdown, text-based PDF, and EPUB documents locally.
 - Pause/resume, long-text chunking, and a layout that adapts from phones to desktops.
@@ -60,9 +61,9 @@ Settings → **Reading mode**:
 | Device voice only | The OS or browser voice | Asks you to install a system voice |
 | Other API · MP3 export | OpenAI or your endpoint, as an MP3 | Shows the provider's error |
 
-**Voxen · Read aloud** in Android's text-selection menu (often under ⋮; the
+**Auri · Read aloud** in Android's text-selection menu (often under ⋮; the
 plain "Read aloud" next to Copy is Android's own Select to Speak) reads the
-selection without opening Voxen: the app you selected in stays in front. The
+selection without opening Auri: the app you selected in stays in front. The
 voice is set in Settings → *Read aloud in other apps*:
 
 | Choice | Reads with |
@@ -80,7 +81,7 @@ background Flutter engine (`ReadAloudService.kt` →
 `lib/features/read_aloud/selection_reader.dart`) runs the same Dart voices as
 the app.
 
-Text shared to Voxen (Share) opens the app and reads with the device voice.
+Text shared to Auri (Share) opens the app and reads with the device voice.
 
 Each mode shows its availability in Settings. Kokoro's is checked by asking the
 server for its voice list, at launch, when Settings opens, on **Check now**, and
@@ -89,7 +90,7 @@ before reading (a result under a minute old is reused).
 ### Kokoro
 
 [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) is a self-hosted,
-OpenAI-compatible neural voice server. Voxen can use the same one Synapse reads
+OpenAI-compatible neural voice server. Auri can use the same one Synapse reads
 aloud with: no provider charges, and 70-odd voices (default `af_heart`, the full
 list appears in Settings once the server answers). Bake the server's address
 into a build so you only enter the token:
@@ -129,7 +130,7 @@ exported as WAV.
 
 Quality is close to the server: same model and voices. The server's text
 front end is better with numbers and abbreviations (it says "twenty
-twenty-six", the phone "two thousand twenty-six"). Voxen pins sherpa-onnx
+twenty-six", the phone "two thousand twenty-six"). Auri pins sherpa-onnx
 **1.13.8**: in 2.x the espeak-ng fallback was removed and Kokoro silently skips
 every word not in its lexicon, names and numbers included.
 
@@ -143,7 +144,7 @@ pointed at an unpacked model (see the file).
    never sent to another.
 2. Enter a personal API key, model, and voice. Only use an endpoint you trust
    with that key and your text.
-3. Press play. Voxen generates the MP3 first (this sends the text to the
+3. Press play. Auri generates the MP3 first (this sends the text to the
    provider and may incur charges; long documents need several requests), then
    plays it. Speed is a playback setting, so the exported MP3 is at 1×.
 4. Export it from the player's menu.
@@ -192,8 +193,8 @@ files, deployment configuration, credentials, or user documents.
 
 ## App icon
 
-The launcher uses a cyan background (`#009DC4`) and the white Brew cup
-with its app-specific symbol. `assets/branding/app_icon.png` is the full-bleed source;
-`flutter_launcher_icons.yaml` is the canonical generation configuration.
-Android uses an 12% foreground inset to keep the symbol within launcher masks
-without a black tile border. Web manifest colors match the icon background.
+The neon violet soundwave artwork in `assets/branding/app_icon.png` is the source
+for Android launcher and web icons. Regenerate them with
+`dart pub global run flutter_launcher_icons` after installing it with
+`dart pub global activate flutter_launcher_icons 0.14.4`. The in-app logo is a 96 × 96 copy of the same
+artwork.

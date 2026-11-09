@@ -9,7 +9,7 @@ import 'on_device/local_models.dart';
 import 'speech_api.dart';
 import 'speech_preset.dart';
 
-/// How Voxen reads.
+/// How Auri reads.
 enum ReadMode {
   /// The Kokoro server and Kokoro on this phone, in the order the user
   /// picked ([VoiceSettings.phoneFirst]; the server by default), then the
