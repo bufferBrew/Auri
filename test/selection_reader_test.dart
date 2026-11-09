@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voxen/features/read_aloud/selection_reader.dart';
-import 'package:voxen/on_device/local_kokoro.dart';
-import 'package:voxen/on_device/local_models.dart';
-import 'package:voxen/voice_settings.dart';
+import 'package:auri/features/read_aloud/selection_reader.dart';
+import 'package:auri/on_device/local_kokoro.dart';
+import 'package:auri/on_device/local_models.dart';
+import 'package:auri/voice_settings.dart';
 
 class _Installed extends LocalModels {
   @override

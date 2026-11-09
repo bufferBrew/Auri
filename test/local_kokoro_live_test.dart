@@ -1,17 +1,17 @@
 // Runs the real on-device engine on a desktop host. Skipped unless pointed at
 // an unpacked model and the host's sherpa-onnx library:
 //
-//   VOXEN_MODEL_DIR=/path/to/kokoro-multi-lang-v1_0 \
-//   VOXEN_SHERPA_LIB=~/.pub-cache/hosted/pub.dev/sherpa_onnx_macos-1.13.8/macos \
+//   AURI_MODEL_DIR=/path/to/kokoro-multi-lang-v1_0 \
+//   AURI_SHERPA_LIB=~/.pub-cache/hosted/pub.dev/sherpa_onnx_macos-1.13.8/macos \
 //   flutter test test/local_kokoro_live_test.dart
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voxen/on_device/local_kokoro.dart';
+import 'package:auri/on_device/local_kokoro.dart';
 
 void main() {
-  final dir = Platform.environment['VOXEN_MODEL_DIR'];
-  final lib = Platform.environment['VOXEN_SHERPA_LIB'];
+  final dir = Platform.environment['AURI_MODEL_DIR'];
+  final lib = Platform.environment['AURI_SHERPA_LIB'];
   test(
     'the real model speaks',
     () async {
@@ -39,7 +39,7 @@ void main() {
       expect(seconds, greaterThan(1));
     },
     skip: dir == null || lib == null
-        ? 'Set VOXEN_MODEL_DIR and VOXEN_SHERPA_LIB to run'
+        ? 'Set AURI_MODEL_DIR and AURI_SHERPA_LIB to run'
         : false,
     timeout: const Timeout(Duration(minutes: 2)),
   );

@@ -15,9 +15,9 @@ copy between `brew-shared` markers — edit the canonical file, then run
 ## Members
 
 Brew apps live under `~/Desktop/code/bufferbrew/brewapps/`, one git repo per folder:
-BREW, BrewHire, BrewTales, BrewVoyage, BrewWire, Synapse, Voxen, WealthBrew, brewfeed.
-Synapse was NeuroBrew until 2026-11-07, and Voxen was VoiceBrew until
-2026-11-07. BrewSkolar was merged into Synapse and retired (2026-10-05).
+BREW, BrewHire, BrewTales, BrewVoyage, BrewWire, Synapse, Auri, WealthBrew, brewfeed.
+Synapse was NeuroBrew until 2026-11-07. BrewSkolar was merged into
+Synapse and retired (2026-10-05).
 
 Not Brew, whatever older docs say: `craftsman`, `castack`, `WinCtrl`,
 `LitmusLLM`. Don't rename those or fold them into Brew docs.

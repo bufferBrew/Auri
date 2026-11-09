@@ -40,11 +40,20 @@ class LocalModels extends ChangeNotifier {
   LocalModels({
     Future<Directory> Function()? baseDir,
     http.Client Function()? client,
-  }) : _baseDir = baseDir ?? _defaultBase,
+    Future<bool> Function(LocalModel, String, bool)? verifyModel,
+  }) : _verifyModel = verifyModel ?? _verifyInstalledModel,
+       _baseDir = baseDir ?? _defaultBase,
        _client = client ?? http.Client.new;
 
   final Future<Directory> Function() _baseDir;
   final http.Client Function() _client;
+  final Future<bool> Function(LocalModel, String, bool) _verifyModel;
+
+  static Future<bool> _verifyInstalledModel(
+    LocalModel model,
+    String path,
+    bool verifyChecksum,
+  ) => model.isComplete(path, verifyChecksum: verifyChecksum);
 
   /// On-device synthesis ships for Android only.
   static bool get supported =>
@@ -86,23 +95,27 @@ class LocalModels extends ChangeNotifier {
   Future<void> refresh() async {
     for (final m in LocalModel.values) {
       if (_activeModel == m) continue;
-      _states[m] = LocalModelState(
-        await _complete(m) ? LocalModelPhase.ready : LocalModelPhase.absent,
-      );
+      _states[m] = await _readState(m);
     }
     notifyListeners();
   }
 
-  Future<bool> _complete(LocalModel model) async {
+  Future<LocalModelState> _readState(LocalModel model) async {
     try {
-      final dir = await dirOf(model);
-      for (final f in model.requiredFiles) {
-        if (!await File('$dir/$f').exists()) return false;
+      final path = await dirOf(model);
+      if (await _verifyModel(model, path, false)) {
+        return const LocalModelState(LocalModelPhase.ready);
       }
-      return true;
+      if (await Directory(path).exists()) {
+        return const LocalModelState(
+          LocalModelPhase.failed,
+          error: 'Incomplete voice model. Download it again.',
+        );
+      }
     } catch (_) {
-      return false;
+      // Model storage is unavailable.
     }
+    return const LocalModelState(LocalModelPhase.absent);
   }
 
   /// Downloads and unpacks [model]. One download at a time.
@@ -111,12 +124,14 @@ class LocalModels extends ChangeNotifier {
     _activeModel = model;
     final client = _client();
     _active = client;
-    final base = await _baseDir();
-    final archive = File('${base.path}/${model.folder}.tar.bz2.part');
-    final dir = Directory('${base.path}/${model.folder}');
+    Directory? staging;
     _set(model, const LocalModelState(LocalModelPhase.downloading));
     try {
+      final base = await _baseDir();
       await base.create(recursive: true);
+      staging = await base.createTemp('.download-');
+      final archive = File('${staging.path}/${model.folder}.tar.bz2');
+      final dir = Directory('${base.path}/${model.folder}');
       final response = await client.send(http.Request('GET', model.url));
       if (response.statusCode != 200) {
         throw HttpException(
@@ -148,17 +163,21 @@ class LocalModels extends ChangeNotifier {
       }
       if (_active != client) throw StateError('cancelled');
       _set(model, const LocalModelState(LocalModelPhase.unpacking));
-      if (await dir.exists()) await dir.delete(recursive: true);
-      final from = archive.path, to = base.path;
-      // Unpacking a few hundred MB of bzip2 takes a while; keep it off the UI.
+      final from = archive.path, to = staging.path;
+      // The reader runs in another Flutter engine. Keep partial files out of
+      // the installed directory until extraction and validation finish.
       await Isolate.run(() => extractFileToDisk(from, to, verify: true));
-      if (!await _complete(model)) {
-        throw const FileSystemException('The download is missing files.');
+      final extracted = Directory('$to/${model.folder}');
+      if (!await _verifyModel(model, extracted.path, true)) {
+        throw const FileSystemException('The voice model download is damaged.');
       }
+      if (_active != client) throw StateError('cancelled');
+      if (await dir.exists()) await dir.delete(recursive: true);
+      if (_active != client) throw StateError('cancelled');
+      await extracted.rename(dir.path);
       _set(model, const LocalModelState(LocalModelPhase.ready));
     } catch (e) {
       final cancelled = _active != client;
-      await _cleanUp(dir);
       _set(
         model,
         cancelled
@@ -167,7 +186,7 @@ class LocalModels extends ChangeNotifier {
       );
     } finally {
       client.close();
-      if (await archive.exists()) await archive.delete();
+      if (staging != null) await _cleanUp(staging);
       if (_active == client) _active = null;
       _activeModel = null;
       notifyListeners();

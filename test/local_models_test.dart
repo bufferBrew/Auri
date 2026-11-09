@@ -6,9 +6,9 @@ import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:voxen/on_device/local_kokoro.dart';
-import 'package:voxen/on_device/local_models.dart';
-import 'package:voxen/voice_settings.dart';
+import 'package:auri/on_device/local_kokoro.dart';
+import 'package:auri/on_device/local_models.dart';
+import 'package:auri/voice_settings.dart';
 
 /// A tiny stand-in for a model release: the required files, as a .tar.bz2.
 Uint8List fakeRelease(LocalModel m, {bool complete = true}) {
@@ -24,11 +24,25 @@ Uint8List fakeRelease(LocalModel m, {bool complete = true}) {
 
 void main() {
   late Directory base;
-  setUp(() async => base = await Directory.systemTemp.createTemp('voxen'));
+  setUp(() async => base = await Directory.systemTemp.createTemp('auri'));
   tearDown(() => base.delete(recursive: true));
 
   LocalModels make(Future<http.Response> Function(http.Request) handler) =>
-      LocalModels(baseDir: () async => base, client: () => MockClient(handler));
+      LocalModels(
+        baseDir: () async => base,
+        client: () => MockClient(handler),
+        verifyModel: (model, path, verifyChecksum) async {
+          if (verifyChecksum) {
+            expect(
+              Directory('${base.path}/${model.folder}').existsSync(),
+              false,
+            );
+          }
+          return model.requiredFiles.every(
+            (name) => File('$path/$name').existsSync(),
+          );
+        },
+      );
 
   test('download unpacks, checks the files and cleans up', () async {
     Uri? asked;
@@ -69,6 +83,27 @@ void main() {
       expect(base.listSync(), isEmpty);
     }
   });
+
+  test(
+    'a previously extracted partial model cannot reach native playback',
+    () async {
+      final model = LocalModel.full;
+      final path = '${base.path}/${model.folder}';
+      for (final name in model.requiredFiles) {
+        final file = File('$path/$name');
+        await file.create(recursive: true);
+        await file.writeAsString('truncated');
+      }
+      final models = LocalModels(baseDir: () async => base);
+      await models.refresh();
+      expect(models.installed, isNull);
+      expect(models.stateOf(model).phase, LocalModelPhase.failed);
+      await expectLater(
+        LocalKokoroEngine.start(path, model: model),
+        throwsA(isA<LocalKokoroException>()),
+      );
+    },
+  );
 
   test('cancel stops the download and removes it', () async {
     final body = StreamController<List<int>>();

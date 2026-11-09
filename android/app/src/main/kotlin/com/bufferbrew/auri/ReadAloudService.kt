@@ -1,4 +1,4 @@
-package com.bufferbrew.voxen
+package com.bufferbrew.auri
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -206,13 +206,13 @@ class ReadAloudService : Service() {
     }
 
     companion object {
-        private const val CHANNEL = "voxen/read_aloud"
+        private const val CHANNEL = "auri/read_aloud"
         private const val CHANNEL_ID = "read_aloud"
         private const val NOTIFICATION_ID = 7
         private const val EXTRA_TEXT = "text"
-        private const val ACTION_STOP = "com.bufferbrew.voxen.STOP_READING"
-        private const val ACTION_DEVICE = "com.bufferbrew.voxen.DEVICE_VOICE"
-        private const val ACTION_REFRESH = "com.bufferbrew.voxen.REFRESH_READING"
+        private const val ACTION_STOP = "com.bufferbrew.auri.STOP_READING"
+        private const val ACTION_DEVICE = "com.bufferbrew.auri.DEVICE_VOICE"
+        private const val ACTION_REFRESH = "com.bufferbrew.auri.REFRESH_READING"
 
         /** Starts reading [text]. False if Android wouldn't start the reader. */
         fun read(context: Context, text: String): Boolean = try {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voxen/core/theme/app_theme.dart';
+import 'package:auri/core/theme/app_theme.dart';
 
 double contrast(Color a, Color b) {
   final la = a.computeLuminance(), lb = b.computeLuminance();

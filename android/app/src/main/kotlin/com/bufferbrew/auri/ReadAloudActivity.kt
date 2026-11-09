@@ -1,4 +1,4 @@
-package com.bufferbrew.voxen
+package com.bufferbrew.auri
 
 import android.Manifest
 import android.app.Activity

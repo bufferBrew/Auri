@@ -15,7 +15,7 @@ import 'domain/text_chunk.dart';
 
 /// Reads text selected in another app ("Read aloud" in its selection menu)
 /// without Auri's screen. It runs in a background Flutter engine that
-/// `ReadAloudService.kt` starts, and talks to it over `voxen/read_aloud`.
+/// `ReadAloudService.kt` starts, and talks to it over `auri/read_aloud`.
 ///
 /// It tries the voices in [VoiceSettings.selectionOrder] (the Kokoro server,
 /// Kokoro on this phone, the device voice) and moves to the next when one
@@ -248,7 +248,7 @@ extension on String {
 Future<void> runSelectionReader() async {
   WidgetsFlutterBinding.ensureInitialized();
   DartPluginRegistrant.ensureInitialized();
-  const channel = MethodChannel('voxen/read_aloud');
+  const channel = MethodChannel('auri/read_aloud');
   final settings = VoiceSettings(store: DeviceSettingsStore());
   await settings.load();
   final reader = SelectionReader(

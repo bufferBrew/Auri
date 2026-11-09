@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import '../features/read_aloud/domain/text_chunk.dart';
@@ -27,6 +29,9 @@ enum LocalModel {
     detail: 'Best voice, and the fastest on recent phones.',
     folder: 'kokoro-multi-lang-v1_0',
     modelFile: 'model.onnx',
+    modelBytes: 325560556,
+    modelSha256:
+        'b40f62b166ac8164b0627ef48a0b358eda0985e272fb03ef5252e7206305da11',
     downloadMb: 333,
     diskMb: 395,
   ),
@@ -35,6 +40,9 @@ enum LocalModel {
     detail: 'A third of the size, about four times slower to speak.',
     folder: 'kokoro-int8-multi-lang-v1_0',
     modelFile: 'model.int8.onnx',
+    modelBytes: 114202993,
+    modelSha256:
+        '75635ea3b85a32d00094dcdd61a258aba87c160f7c264c304a7b3ae9d734195e',
     downloadMb: 126,
     diskMb: 186,
   );
@@ -44,6 +52,8 @@ enum LocalModel {
     required this.detail,
     required this.folder,
     required this.modelFile,
+    required this.modelBytes,
+    required this.modelSha256,
     required this.downloadMb,
     required this.diskMb,
   });
@@ -52,6 +62,8 @@ enum LocalModel {
   final String detail;
   final String folder;
   final String modelFile;
+  final int modelBytes;
+  final String modelSha256;
   final int downloadMb;
   final int diskMb;
 
@@ -69,6 +81,24 @@ enum LocalModel {
     'lexicon-zh.txt',
     'espeak-ng-data/phontab',
   ];
+
+  Future<bool> isComplete(String dir, {required bool verifyChecksum}) async {
+    try {
+      for (final name in requiredFiles) {
+        final size = await File('$dir/$name').length();
+        if (size == 0 || (name == modelFile && size != modelBytes)) {
+          return false;
+        }
+      }
+      if (!verifyChecksum) return true;
+      final digest = await sha256
+          .bind(File('$dir/$modelFile').openRead())
+          .first;
+      return digest.toString() == modelSha256;
+    } on FileSystemException {
+      return false;
+    }
+  }
 }
 
 /// Speaker names in speaker-id order, read from the model's own metadata
@@ -192,6 +222,12 @@ class LocalKokoroEngine {
     int threads = 4,
     String? libraryPath,
   }) async {
+    // The native runtime can abort the process on a damaged ONNX file.
+    if (!await model.isComplete(modelDir, verifyChecksum: true)) {
+      throw const LocalKokoroException(
+        'This Kokoro model is damaged. Download it again in Settings.',
+      );
+    }
     final replies = ReceivePort();
     final ready = Completer<SendPort>();
     late final LocalKokoroEngine engine;

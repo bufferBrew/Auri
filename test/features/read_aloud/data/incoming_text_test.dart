@@ -1,10 +1,10 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voxen/features/read_aloud/data/incoming_text.dart';
+import 'package:auri/features/read_aloud/data/incoming_text.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  const channel = MethodChannel('voxen/incoming_text');
+  const channel = MethodChannel('auri/incoming_text');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 

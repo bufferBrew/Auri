@@ -1,6 +1,6 @@
 # Auri
 
-Auri · a Brew app, formerly Voxen and VoiceBrew.
+Auri · a Brew app.
 
 A standalone Flutter text-to-speech app for Android and web, extracted from
 NeuroBrew without changing or removing NeuroBrew's reader.

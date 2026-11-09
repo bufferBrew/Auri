@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 /// see `ReadAloudActivity.kt`.)
 class IncomingText {
   IncomingText({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel('voxen/incoming_text');
+    : _channel = channel ?? const MethodChannel('auri/incoming_text');
 
   final MethodChannel _channel;
 

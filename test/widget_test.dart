@@ -5,13 +5,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:voxen/appearance_settings.dart';
-import 'package:voxen/core/theme/app_theme.dart';
-import 'package:voxen/main.dart';
-import 'package:voxen/on_device/local_models.dart';
-import 'package:voxen/settings_screen.dart';
-import 'package:voxen/ui/voice_widgets.dart';
-import 'package:voxen/voice_settings.dart';
+import 'package:auri/appearance_settings.dart';
+import 'package:auri/core/theme/app_theme.dart';
+import 'package:auri/main.dart';
+import 'package:auri/on_device/local_models.dart';
+import 'package:auri/settings_screen.dart';
+import 'package:auri/ui/voice_widgets.dart';
+import 'package:auri/voice_settings.dart';
 
 VoiceSettings settings({ReadMode mode = ReadMode.auto, http.Client? client}) =>
     VoiceSettings(
@@ -89,14 +89,14 @@ void main() {
         return speaking.future;
       })
       ..setMockMethodCallHandler(
-        const MethodChannel('voxen/incoming_text'),
+        const MethodChannel('auri/incoming_text'),
         (call) async => call.method == 'takeText' ? 'Hello from Chrome.' : null,
       );
     addTearDown(() {
       tester.binding.defaultBinaryMessenger
         ..setMockMethodCallHandler(const MethodChannel('flutter_tts'), null)
         ..setMockMethodCallHandler(
-          const MethodChannel('voxen/incoming_text'),
+          const MethodChannel('auri/incoming_text'),
           null,
         );
     });

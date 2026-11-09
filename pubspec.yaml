@@ -1,4 +1,4 @@
-name: voxen
+name: auri
 description: Standalone text-to-speech reader with device voices and API MP3 export.
 publish_to: none
 version: 1.0.0+1
@@ -11,6 +11,7 @@ dependencies:
   file_picker: ^13.2.0
   pdfrx: ^2.4.8
   archive: ^4.6.0
+  crypto: ^3.0.8
   xml: ^7.0.1
   html: ^0.15.7
   http: ^1.6.0
