@@ -1,4 +1,4 @@
-package com.bufferbrew.voxen
+package com.bufferbrew.auri
 
 import android.content.Intent
 import android.os.Bundle
@@ -59,6 +59,6 @@ class MainActivity : FlutterActivity() {
     }
 
     private companion object {
-        const val CHANNEL = "voxen/incoming_text"
+        const val CHANNEL = "auri/incoming_text"
     }
 }

@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:voxen/speech_api.dart';
-import 'package:voxen/speech_preset.dart';
+import 'package:auri/speech_api.dart';
+import 'package:auri/speech_preset.dart';
 
 void main() {
   test('Kokoro speech endpoint from a base URL', () {
