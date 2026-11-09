@@ -12,6 +12,7 @@ import 'features/read_aloud/data/file_importer.dart';
 import 'features/read_aloud/data/incoming_text.dart';
 import 'features/read_aloud/domain/text_chunk.dart';
 import 'features/read_aloud/domain/text_import.dart';
+import 'features/read_aloud/selection_reader.dart';
 import 'mp3.dart';
 import 'on_device/local_kokoro.dart';
 import 'settings_screen.dart';
@@ -22,11 +23,16 @@ import 'ui/reading_view.dart';
 import 'ui/voice_widgets.dart';
 import 'voice_settings.dart';
 
+/// "Read aloud" from another app's selection menu, run by
+/// `ReadAloudService.kt` in a background engine with no screen.
+@pragma('vm:entry-point')
+Future<void> readAloudMain() => runSelectionReader();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Load saved settings before the first frame, so the app opens in your
   // theme and mode instead of flashing the defaults and switching (most
-  // visible when it opens straight from "Read with Voxen").
+  // visible when it opens from Share).
   final store = DeviceSettingsStore();
   final settings = VoiceSettings(store: store);
   final appearance = AppearanceSettings(store: store);
@@ -464,32 +470,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return engine;
   }
 
-  /// Pieces for the phone: a short first one so audio starts quickly.
-  static List<TextChunk> _phoneChunks(String text) {
-    final first = chunkText(text, maxChars: localKokoroFirstChars);
-    if (first.isEmpty) return first;
-    final head = first.first;
-    return [
-      head,
-      for (final c in chunkText(
-        text.substring(head.end),
-        maxChars: localKokoroChunkChars,
-      ))
-        TextChunk(
-          index: c.index + 1,
-          start: head.end + c.start,
-          end: head.end + c.end,
-          text: c.text,
-        ),
-    ];
-  }
-
   /// Kokoro on this phone: like the server path, the next piece is made
   /// while this one plays, and a whole reading becomes a WAV to export.
   Future<void> _readPhone() async {
     final session = ++_session;
     final from = _offset.clamp(0, _text.text.length);
-    final chunks = _phoneChunks(_text.text.substring(from));
+    final chunks = phoneChunks(_text.text.substring(from));
     if (chunks.isEmpty) {
       setState(() => _offset = 0);
       return;
@@ -853,7 +839,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _incoming.listen(_readIncoming);
   }
 
-  /// Text selected in another app ("Read with Voxen" or Share): read it at
+  /// Text shared from another app: read it at
   /// once with the device voice, whatever the mode. A quick selection
   /// shouldn't wait on Kokoro or spend on an API.
   ///

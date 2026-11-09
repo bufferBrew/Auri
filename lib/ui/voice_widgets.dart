@@ -200,7 +200,9 @@ class ReadModePicker extends StatelessWidget {
     };
     String detail(ReadMode mode) => switch (mode) {
       ReadMode.auto =>
-        'Kokoro on this phone, then the Kokoro server, then the device voice.',
+        s.phoneFirst && LocalModels.supported
+            ? 'Kokoro on this phone, then the Kokoro server, then the device voice.'
+            : 'The Kokoro server, then Kokoro on this phone, then the device voice.',
       ReadMode.kokoro =>
         s.kokoroHost.isEmpty
             ? 'Your own Kokoro voice server.'
@@ -238,6 +240,101 @@ class ReadModePicker extends StatelessWidget {
                       Text(detail(mode)),
                       const SizedBox(height: AppSpacing.xs + AppSpacing.xxs),
                       pillFor(mode),
+                    ],
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What "Read aloud" in other apps reads with, each with whether it can.
+class SelectionVoicePicker extends StatelessWidget {
+  const SelectionVoicePicker({super.key, required this.settings});
+
+  final VoiceSettings settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = settings;
+    final kokoro = s.kokoroStatus;
+    StatusPill serverPill() {
+      if (kokoro.state == KokoroState.notSetUp ||
+          kokoro.state == KokoroState.needsToken) {
+        return kokoro.pill;
+      }
+      if (!s.selectionCanUseServer) {
+        return const StatusPill(
+          label: 'Turn on “Remember token”',
+          icon: Icons.key_rounded,
+        );
+      }
+      return kokoro.pill;
+    }
+
+    StatusPill pillFor(SelectionVoice v) => switch (v) {
+      SelectionVoice.auto => switch (s.selectionOrder.first) {
+        Engine.server => const StatusPill(
+          label: 'Kokoro server first',
+          icon: Icons.dns_outlined,
+          tone: Tone.good,
+        ),
+        Engine.phone => const StatusPill(
+          label: 'Kokoro on this phone first',
+          icon: Icons.memory_rounded,
+          tone: Tone.good,
+        ),
+        _ => const StatusPill(
+          label: 'Device voice (no Kokoro set up)',
+          icon: Icons.phone_android_rounded,
+        ),
+      },
+      SelectionVoice.server => serverPill(),
+      SelectionVoice.phone => localModelPill(s.local),
+      SelectionVoice.device => const StatusPill(
+        label: 'Available',
+        icon: Icons.check_circle_rounded,
+        tone: Tone.good,
+      ),
+    };
+    String detail(SelectionVoice v) => switch (v) {
+      SelectionVoice.auto =>
+        'Kokoro on your server if it answers (quickest), then Kokoro on this phone, then the device voice.',
+      SelectionVoice.server =>
+        'Your Kokoro server${s.kokoroHost.isEmpty ? '' : ', ${s.kokoroHost}'}. Needs the remembered token.',
+      SelectionVoice.phone =>
+        'Offline on the phone. The first piece takes a moment while the model loads.',
+      SelectionVoice.device => 'Starts at once. Works offline.',
+    };
+    return RadioGroup<SelectionVoice>(
+      groupValue: s.selectionVoice,
+      onChanged: (v) => s.selectionVoice = v!,
+      child: Column(
+        children: [
+          for (final v in SelectionVoice.values)
+            if (v != SelectionVoice.phone || LocalModels.supported)
+              RadioListTile<SelectionVoice>(
+                value: v,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                ),
+                secondary: Icon(switch (v) {
+                  SelectionVoice.auto => Icons.bolt_rounded,
+                  SelectionVoice.server => Icons.dns_outlined,
+                  SelectionVoice.phone => Icons.memory_rounded,
+                  SelectionVoice.device => Icons.phone_android_rounded,
+                }),
+                title: Text(v.label),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.xxs),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(detail(v)),
+                      const SizedBox(height: AppSpacing.xs + AppSpacing.xxs),
+                      pillFor(v),
                     ],
                   ),
                 ),

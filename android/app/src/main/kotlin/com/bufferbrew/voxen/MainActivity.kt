@@ -7,8 +7,9 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Receives text from other apps (selection menu "Read with Voxen" or the
- * Share sheet) and hands it to Flutter.
+ * Receives text shared from other apps (Share sheet) and hands it to
+ * Flutter. "Read aloud" in the selection menu goes to [ReadAloudActivity]
+ * instead, which reads without opening the app.
  *
  * Flutter pulls the text with `takeText`, so a cold start can't lose it to a
  * race with engine start-up; while running, `textAvailable` tells Flutter to
