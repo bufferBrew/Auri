@@ -61,7 +61,7 @@ Settings → **Reading mode**:
 | Device voice only | The OS or browser voice | Asks you to install a system voice |
 | Other API · MP3 export | OpenAI or your endpoint, as an MP3 | Shows the provider's error |
 
-**Auri · Read aloud** in Android's text-selection menu (often under ⋮; the
+**Auri · 🔊 Read aloud** in Android's text-selection menu (often under ⋮; the
 plain "Read aloud" next to Copy is Android's own Select to Speak) reads the
 selection without opening Auri: the app you selected in stays in front. The
 voice is set in Settings → *Read aloud in other apps*:

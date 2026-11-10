@@ -11,6 +11,7 @@ import '../../on_device/local_kokoro.dart';
 import '../../speech_api.dart';
 import '../../speech_preset.dart';
 import '../../voice_settings.dart';
+import 'data/speech_playback.dart';
 import 'domain/text_chunk.dart';
 
 /// Reads text selected in another app ("Read aloud" in its selection menu)
@@ -61,8 +62,9 @@ class SelectionReader {
 
   /// Reads [text] from the start, replacing anything being read.
   Future<void> read(String text) async {
-    await _halt();
     final session = ++_session;
+    await _halt();
+    if (session != _session) return;
     _text = text.trim();
     _at = 0;
     if (_text.isEmpty) return onDone();
@@ -72,8 +74,9 @@ class SelectionReader {
   /// Carries on with the device voice from the piece being read.
   Future<void> useDevice() async {
     if (_text.isEmpty || _engine == Engine.device) return;
-    await _halt();
     final session = ++_session;
+    await _halt();
+    if (session != _session) return;
     await _run(const [Engine.device], session, null);
   }
 
@@ -103,6 +106,9 @@ class SelectionReader {
           _text = '';
           onDone();
         }
+        return;
+      } on _PlaybackInterrupted {
+        if (session == _session) onError('Reading was interrupted.');
         return;
       } catch (e) {
         if (session != _session) return;
@@ -219,8 +225,10 @@ class SelectionReader {
         Uri.dataFromBytes(bytes, mimeType: mimeType).toString(),
       );
       if (session != _session) return;
-      await player.play();
+      final completed = await playSpeechChunk(player);
       if (session != _session) return;
+      if (!completed) throw const _PlaybackInterrupted();
+      _at = from + chunks[i].end;
     }
   }
 
@@ -238,6 +246,10 @@ class SelectionReader {
       if (result == 0) throw const SpeechException('Device speech failed');
     }
   }
+}
+
+class _PlaybackInterrupted implements Exception {
+  const _PlaybackInterrupted();
 }
 
 extension on String {
