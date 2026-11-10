@@ -10,6 +10,7 @@ import 'appearance_settings.dart';
 import 'core/theme/app_theme.dart';
 import 'features/read_aloud/data/file_importer.dart';
 import 'features/read_aloud/data/incoming_text.dart';
+import 'features/read_aloud/data/speech_playback.dart';
 import 'features/read_aloud/domain/text_chunk.dart';
 import 'features/read_aloud/domain/text_import.dart';
 import 'features/read_aloud/selection_reader.dart';
@@ -406,8 +407,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
         );
         await player.setSpeed(_speed);
         if (!mounted || session != _session) return;
-        await player.play();
+        final completed = await playSpeechChunk(player);
         if (!mounted || session != _session) return;
+        if (!completed) {
+          await _stop();
+          return;
+        }
         _offset = from + chunks[i].end;
       }
       if (mounted && session == _session) {
@@ -522,8 +527,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
         );
         await player.setSpeed(_speed);
         if (!mounted || session != _session) return;
-        await player.play();
+        final completed = await playSpeechChunk(player);
         if (!mounted || session != _session) return;
+        if (!completed) {
+          await _stop();
+          return;
+        }
         _offset = from + chunks[i].end;
       }
       if (mounted && session == _session) {

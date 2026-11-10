@@ -219,7 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     AppSpacing.xs,
                                   ),
                                   child: Text(
-                                    'Select text in any app and tap “Auri · Read aloud” (often under ⋮). Auri reads it without opening; the notification shows the voice, with Stop and Device voice.',
+                                    'Select text in any app and tap “Auri · 🔊 Read aloud” (often under ⋮). Auri reads it without opening; the notification shows the voice, with Stop and Device voice.',
                                     style: note,
                                   ),
                                 ),
