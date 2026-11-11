@@ -15,7 +15,9 @@ class IncomingText {
 
   /// Calls [onText] with any text waiting from launch, and again for each
   /// selection sent while the app is running.
-  Future<void> listen(void Function(String text) onText) async {
+  Future<void> listen(
+    void Function(String text, String? subject) onText,
+  ) async {
     if (!supported) return;
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'textAvailable') await _take(onText);
@@ -27,10 +29,19 @@ class IncomingText {
     if (supported) _channel.setMethodCallHandler(null);
   }
 
-  Future<void> _take(void Function(String text) onText) async {
+  Future<void> _take(void Function(String text, String? subject) onText) async {
     try {
-      final text = await _channel.invokeMethod<String>('takeText');
-      if (text != null && text.trim().isNotEmpty) onText(text);
+      final payload = await _channel.invokeMethod<Object?>('takeText');
+      final text = payload is Map ? payload['text'] : payload;
+      final subject = payload is Map ? payload['subject'] : null;
+      if (text is String && text.trim().isNotEmpty) {
+        onText(
+          text,
+          subject is String && subject.trim().isNotEmpty
+              ? subject.trim()
+              : null,
+        );
+      }
     } on PlatformException {
       // Nothing to read; the reader just opens as usual.
     } on MissingPluginException {

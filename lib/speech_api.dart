@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'features/read_aloud/domain/text_chunk.dart';
 import 'mp3.dart';
+import 'features/read_aloud/domain/word_timing.dart';
 
 class SpeechException implements Exception {
   const SpeechException(this.message, {this.status});
@@ -78,6 +79,70 @@ class SpeechApi {
     }
     onProgress?.call(chunks.length, chunks.length);
     return concatMp3(parts);
+  }
+
+  /// Kokoro-FastAPI's captioned endpoint returns both the audio and timing.
+  Future<({Uint8List audio, List<WordTiming> timings})> captioned({
+    required String endpoint,
+    required String apiKey,
+    required String voice,
+    required String text,
+    required bool useMarkup,
+  }) async {
+    final speech = _checkEndpoint(endpoint);
+    final request =
+        http.Request('POST', speech.replace(path: '/dev/captioned_speech'))
+          ..followRedirects = false
+          ..headers.addAll({
+            'Authorization': 'Bearer ${apiKey.trim()}',
+            'Content-Type': 'application/json',
+          })
+          ..body = jsonEncode({
+            'model': 'kokoro',
+            'input': text,
+            'voice': voice,
+            'speed': 1,
+            'response_format': 'mp3',
+            'stream': false,
+            'return_timestamps': true,
+            'allow_voice_tags': true,
+          });
+    final response = await (() async {
+      return http.Response.fromStream(await client.send(request));
+    })().timeout(const Duration(seconds: 90));
+    if (!useMarkup &&
+        (response.statusCode == 404 || response.statusCode == 405)) {
+      return (
+        audio: await generate(
+          text: text,
+          endpoint: endpoint,
+          apiKey: apiKey,
+          model: 'kokoro',
+          voice: voice,
+        ),
+        timings: const <WordTiming>[],
+      );
+    }
+    if (response.statusCode != 200) {
+      throw SpeechException(
+        'Kokoro could not generate audio (HTTP ${response.statusCode}).',
+        status: response.statusCode,
+      );
+    }
+    final body = jsonDecode(response.body);
+    if (body is! Map || body['audio'] is! String) {
+      throw const SpeechException('Kokoro returned no audio.');
+    }
+    final audio = base64Decode(body['audio'] as String);
+    if (!_isMp3(audio)) {
+      throw const SpeechException('Kokoro returned invalid MP3 audio.');
+    }
+    final raw = body['timestamps'];
+    final timings = [
+      for (final item in raw is List ? raw : const [])
+        ?WordTiming.fromJson(item),
+    ]..sort((a, b) => a.start.compareTo(b.start));
+    return (audio: audio, timings: timings);
   }
 
   /// Voice ids from an OpenAI-compatible server's `/audio/voices`, next to the

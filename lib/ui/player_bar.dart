@@ -18,21 +18,49 @@ class PlayerAction {
   final VoidCallback? onPressed;
 }
 
-const playbackSpeeds = <double>[0.75, 1, 1.25, 1.5, 1.75, 2];
+const playbackSpeeds = <double>[
+  0.25,
+  0.5,
+  0.75,
+  1,
+  1.25,
+  1.5,
+  1.75,
+  2,
+  2.25,
+  2.5,
+  2.75,
+  3,
+];
+
+String _clock(Duration value) {
+  final seconds = value.inSeconds;
+  return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+}
 
 String speedLabel(double speed) {
-  final text = speed.toStringAsFixed(2).replaceFirst(RegExp(r'0$'), '');
+  final text = speed.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
   return '$text×';
 }
 
 /// The bottom bar: voice and its source on the left (tap to change), then
 /// speed, the main play control and a menu for everything else.
-class PlayerBar extends StatelessWidget {
+class PlayerBar extends StatefulWidget {
   const PlayerBar({
     super.key,
     required this.source,
     required this.subtitle,
     required this.progress,
+    this.onSeek,
+    this.total,
+    this.elapsed = Duration.zero,
+    this.estimated = false,
+    this.onParagraphs,
+    this.paragraphLabel,
+    this.onPrevious,
+    this.onNext,
+    this.onBack,
+    this.onForward,
     required this.playing,
     required this.busy,
     required this.playTooltip,
@@ -49,6 +77,16 @@ class PlayerBar extends StatelessWidget {
 
   /// 0–1, or null for "working on it".
   final double? progress;
+  final ValueChanged<double>? onSeek;
+  final Duration? total;
+  final Duration elapsed;
+  final bool estimated;
+  final VoidCallback? onParagraphs;
+  final String? paragraphLabel;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+  final VoidCallback? onBack;
+  final VoidCallback? onForward;
   final bool playing;
   final bool busy;
   final String playTooltip;
@@ -60,10 +98,23 @@ class PlayerBar extends StatelessWidget {
   final List<PlayerAction> actions;
 
   @override
+  State<PlayerBar> createState() => _PlayerBarState();
+}
+
+class _PlayerBarState extends State<PlayerBar> {
+  double? _drag;
+
+  @override
+  void didUpdateWidget(PlayerBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onSeek == null) _drag = null;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final t = context.typography;
-    final stop = playing || busy;
+    final stop = widget.playing || widget.busy;
     return Material(
       color: c.surfaceElevated,
       child: SafeArea(
@@ -71,14 +122,77 @@ class PlayerBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Semantics(
-              label: 'Reading progress',
-              child: LinearProgressIndicator(
-                value: busy && !playing ? null : progress,
+            if (widget.onSeek == null)
+              LinearProgressIndicator(
+                value: widget.busy && !widget.playing ? null : widget.progress,
                 minHeight: 3,
                 backgroundColor: c.divider,
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: AppBreakpoints.readingMaxWidth,
+                ),
+                child: Column(
+                  children: [
+                    Semantics(
+                      label: 'Playback position',
+                      child: Slider(
+                        value: _drag ?? widget.progress ?? 0,
+                        semanticFormatterCallback: (v) => widget.total == null
+                            ? '${(v * 100).round()}% through text'
+                            : _clock(widget.total! * v),
+                        onChanged: (v) => setState(() => _drag = v),
+                        onChangeEnd: (v) {
+                          setState(() => _drag = null);
+                          widget.onSeek?.call(v);
+                        },
+                      ),
+                    ),
+                    if (widget.total case final total?)
+                      Text(
+                        '${_clock(_drag == null ? widget.elapsed : total * _drag!)}'
+                        ' / ${widget.estimated ? '~' : ''}${_clock(total)}',
+                        style: t.bodySmall,
+                      ),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        IconButton(
+                          tooltip: 'Previous or restart paragraph (Shift+P)',
+                          onPressed: widget.onPrevious,
+                          icon: const Icon(Icons.skip_previous_rounded),
+                        ),
+                        if (widget.onBack != null)
+                          IconButton(
+                            tooltip: 'Back 10 seconds (J)',
+                            onPressed: widget.onBack,
+                            icon: const Icon(Icons.replay_10_rounded),
+                          ),
+                        TextButton(
+                          onPressed: widget.onParagraphs,
+                          child: Text(
+                            widget.paragraphLabel ?? 'Paragraphs',
+                            semanticsLabel: 'Show all paragraphs',
+                          ),
+                        ),
+                        if (widget.onForward != null)
+                          IconButton(
+                            tooltip: 'Forward 10 seconds (L)',
+                            onPressed: widget.onForward,
+                            icon: const Icon(Icons.forward_10_rounded),
+                          ),
+                        IconButton(
+                          tooltip: 'Next paragraph (Shift+N)',
+                          onPressed: widget.onNext,
+                          icon: const Icon(Icons.skip_next_rounded),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
             ConstrainedBox(
               // Lines the controls up with the text column on wide screens.
               constraints: const BoxConstraints(
@@ -97,10 +211,10 @@ class PlayerBar extends StatelessWidget {
                       child: Semantics(
                         button: true,
                         label:
-                            'Voice: ${source.title}. ${source.origin}. Change voice',
+                            'Voice: ${widget.source.title}. ${widget.source.origin}. Change voice',
                         excludeSemantics: true,
                         child: InkWell(
-                          onTap: onVoiceTap,
+                          onTap: widget.onVoiceTap,
                           borderRadius: AppRadius.mdAll,
                           child: Padding(
                             padding: const EdgeInsets.all(AppSpacing.sm),
@@ -114,7 +228,7 @@ class PlayerBar extends StatelessWidget {
                                   child: SizedBox.square(
                                     dimension: 40,
                                     child: Icon(
-                                      source.icon,
+                                      widget.source.icon,
                                       color: c.accentStrong,
                                     ),
                                   ),
@@ -126,13 +240,13 @@ class PlayerBar extends StatelessWidget {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        source.title,
+                                        widget.source.title,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: t.titleSmall,
                                       ),
                                       Text(
-                                        subtitle,
+                                        widget.subtitle,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: t.bodySmall.copyWith(
@@ -152,9 +266,9 @@ class PlayerBar extends StatelessWidget {
                       menuChildren: [
                         for (final s in playbackSpeeds)
                           MenuItemButton(
-                            onPressed: () => onSpeed(s),
+                            onPressed: () => widget.onSpeed(s),
                             leadingIcon: Icon(
-                              s == speed ? Icons.check_rounded : null,
+                              s == widget.speed ? Icons.check_rounded : null,
                               size: 18,
                             ),
                             child: Text(speedLabel(s)),
@@ -171,15 +285,17 @@ class PlayerBar extends StatelessWidget {
                               horizontal: AppSpacing.sm,
                             ),
                           ),
-                          child: Text(speedLabel(speed)),
+                          child: Text(speedLabel(widget.speed)),
                         ),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     IconButton.filled(
                       tooltip: stop
-                          ? (busy && !playing ? 'Cancel' : 'Pause')
-                          : playTooltip,
+                          ? (widget.busy && !widget.playing
+                                ? 'Cancel'
+                                : 'Pause')
+                          : widget.playTooltip,
                       iconSize: 30,
                       // Explicit: the theme's grey icon colour would otherwise
                       // win over the filled variant's on-accent ink.
@@ -190,8 +306,8 @@ class PlayerBar extends StatelessWidget {
                         disabledBackgroundColor: c.surfaceMuted,
                         disabledForegroundColor: c.textTertiary,
                       ),
-                      onPressed: stop ? onPause : onPlay,
-                      icon: busy && !playing
+                      onPressed: stop ? widget.onPause : widget.onPlay,
+                      icon: widget.busy && !widget.playing
                           ? SizedBox.square(
                               dimension: 22,
                               child: CircularProgressIndicator(
@@ -200,14 +316,14 @@ class PlayerBar extends StatelessWidget {
                               ),
                             )
                           : Icon(
-                              playing
+                              widget.playing
                                   ? Icons.pause_rounded
                                   : Icons.play_arrow_rounded,
                             ),
                     ),
                     MenuAnchor(
                       menuChildren: [
-                        for (final a in actions)
+                        for (final a in widget.actions)
                           MenuItemButton(
                             onPressed: a.onPressed,
                             leadingIcon: Icon(a.icon, size: 20),

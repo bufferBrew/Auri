@@ -53,9 +53,7 @@ void main() {
       const MethodChannel('flutter_tts'),
       (call) => call.method == 'speak' ? speaking.future : Future.value(1),
     );
-    await tester.pumpWidget(
-      AuriApp(settings: settings(mode: ReadMode.device)),
-    );
+    await tester.pumpWidget(AuriApp(settings: settings(mode: ReadMode.device)));
     await tester.enterText(
       find.byType(TextField).last,
       'First sentence. Second sentence.',
@@ -75,6 +73,64 @@ void main() {
     await shortcut();
     expect(find.byTooltip('Read aloud'), findsOneWidget);
     expect(find.text('Edit'), findsNothing, reason: 'still at the start');
+  });
+
+  testWidgets('tapping a paragraph moves speech and reopening resumes it', (
+    tester,
+  ) async {
+    final spoken = <Object?>[];
+    final pending = <Completer<Object?>>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('flutter_tts'),
+      (call) {
+        if (call.method != 'speak') return Future.value(1);
+        spoken.add(call.arguments);
+        final result = Completer<Object?>();
+        pending.add(result);
+        return result.future;
+      },
+    );
+    addTearDown(() {
+      for (final result in pending) {
+        if (!result.isCompleted) result.complete(1);
+      }
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('flutter_tts'),
+        null,
+      );
+    });
+    final s = settings(mode: ReadMode.device);
+    await tester.pumpWidget(AuriApp(settings: s));
+    await tester.enterText(find.byType(TextField).first, 'My reading');
+    await tester.enterText(
+      find.byType(TextField).last,
+      'First paragraph.\n\nSecond paragraph.',
+    );
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(spoken, isNotEmpty);
+    await tester.tapAt(
+      tester.getTopLeft(find.text('Second paragraph.', findRichText: true)) +
+          const Offset(2, 8),
+    );
+    await tester.pumpAndSettle();
+    expect(spoken.last, 'Second paragraph.');
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save reading on this device'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Saved readings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('My reading'));
+    await tester.pumpAndSettle();
+    expect(find.text('Resumed from your saved place'), findsOneWidget);
+    final callsBeforeResume = spoken.length;
+    await tester.tap(find.byTooltip('Resume'));
+    await tester.pumpAndSettle();
+    expect(spoken, hasLength(callsBeforeResume + 1));
+    expect(spoken.last, 'Second paragraph.');
   });
 
   testWidgets('selected text from another app reads with the device voice', (
@@ -146,7 +202,7 @@ void main() {
     expect(find.text('From mac.example.ts.net'), findsOneWidget);
   });
 
-  testWidgets('Other API generates on play, and export waits for audio', (
+  testWidgets('Other API can export directly once there is text', (
     tester,
   ) async {
     await tester.pumpWidget(AuriApp(settings: settings(mode: ReadMode.api)));
@@ -157,6 +213,19 @@ void main() {
       find.widgetWithText(MenuItemButton, 'Export MP3'),
     );
     expect(export.onPressed, isNull);
+    await tester.tapAt(const Offset(20, 120));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Export this.');
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<MenuItemButton>(
+            find.widgetWithText(MenuItemButton, 'Export MP3'),
+          )
+          .onPressed,
+      isNotNull,
+    );
   });
 
   testWidgets('the voice sheet switches mode from the player', (tester) async {
