@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import '../core/theme/app_theme.dart';
 import '../features/read_aloud/domain/text_chunk.dart';
 
@@ -14,6 +15,7 @@ class ReadingView extends StatefulWidget {
     this.word,
     this.status,
     this.onEdit,
+    this.onSeek,
     this.highlight = true,
     this.padding = EdgeInsets.zero,
   });
@@ -35,6 +37,7 @@ class ReadingView extends StatefulWidget {
 
   /// Back to editing; null while reading.
   final VoidCallback? onEdit;
+  final ValueChanged<int>? onSeek;
   final EdgeInsets padding;
 
   @override
@@ -79,6 +82,7 @@ class _ReadingViewState extends State<ReadingView> {
     if (paragraph == _shown || paragraph < 0) return;
     _shown = paragraph;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _shown != paragraph || paragraph >= _keys.length) return;
       final target = _keys[paragraph].currentContext;
       if (target == null || !mounted) return;
       Scrollable.ensureVisible(
@@ -152,9 +156,31 @@ class _ReadingViewState extends State<ReadingView> {
         const SizedBox(height: AppSpacing.xl),
         for (var i = 0; i < _paragraphs.length; i++)
           Padding(
-            key: _keys[i],
             padding: const EdgeInsets.only(bottom: AppSpacing.lg),
-            child: Text.rich(paragraph(_paragraphs[i]), style: t.reading),
+            child: GestureDetector(
+              onTapUp: widget.onSeek == null
+                  ? null
+                  : (event) {
+                      final render = _keys[i].currentContext
+                          ?.findRenderObject();
+                      if (render is! RenderParagraph) return;
+                      final position = render.getPositionForOffset(
+                        render.globalToLocal(event.globalPosition),
+                      );
+                      final span = _paragraphs[i];
+                      widget.onSeek?.call(
+                        (span.start + position.offset).clamp(
+                          span.start,
+                          span.end - 1,
+                        ),
+                      );
+                    },
+              child: Text.rich(
+                key: _keys[i],
+                paragraph(_paragraphs[i]),
+                style: t.reading,
+              ),
+            ),
           ),
         const SizedBox(height: AppSpacing.xxxl),
       ],

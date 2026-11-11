@@ -38,6 +38,66 @@ void main() {
     expect(count, greaterThan(1));
     expect(audio.length, count * 4);
   });
+  test('Kokoro requests timed audio and allows delivery tags', () async {
+    final api = SpeechApi(
+      MockClient((request) async {
+        expect(request.url.path, '/dev/captioned_speech');
+        expect(request.headers['Authorization'], 'Bearer test-placeholder');
+        expect(request.followRedirects, false);
+        final body = jsonDecode(request.body) as Map;
+        expect(body['return_timestamps'], true);
+        expect(body['allow_voice_tags'], true);
+        expect(body['input'], 'Hello [pause:0.5s]');
+        return http.Response(
+          jsonEncode({
+            'audio': base64Encode([0xff, 0xfb, 0x90, 0]),
+            'timestamps': [
+              {'word': 'Hello', 'start_time': 0.1, 'end_time': 0.4},
+              {'word': 'bad', 'start_time': -5, 'end_time': -1},
+            ],
+          }),
+          200,
+        );
+      }),
+    );
+    final result = await api.captioned(
+      endpoint: 'https://example.com/v1/audio/speech',
+      apiKey: 'test-placeholder',
+      voice: 'af_heart',
+      text: 'Hello [pause:0.5s]',
+      useMarkup: true,
+    );
+    expect(result.audio.length, 4);
+    expect(result.timings.single.word, 'Hello');
+    expect(result.timings.single.start, const Duration(milliseconds: 100));
+  });
+
+  test('Kokoro falls back to standard speech only for unmarked text', () async {
+    final requests = <String>[];
+    final api = SpeechApi(
+      MockClient((request) async {
+        requests.add(request.url.path);
+        return request.url.path == '/dev/captioned_speech'
+            ? http.Response('', 404)
+            : http.Response.bytes([0xff, 0xfb, 0x90, 0], 200);
+      }),
+    );
+    Future<void> speak(bool useMarkup) => api.captioned(
+      endpoint: 'https://example.com/v1/audio/speech',
+      apiKey: 'test-placeholder',
+      voice: 'af_heart',
+      text: 'Hello',
+      useMarkup: useMarkup,
+    );
+    await speak(false);
+    await expectLater(speak(true), throwsA(isA<SpeechException>()));
+    expect(requests, [
+      '/dev/captioned_speech',
+      '/v1/audio/speech',
+      '/dev/captioned_speech',
+    ]);
+  });
+
   test('rejects insecure endpoints before sending a key', () async {
     final api = SpeechApi(
       MockClient((_) async {

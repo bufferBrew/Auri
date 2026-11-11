@@ -16,8 +16,18 @@ void main() {
       return 'Hello from Chrome';
     });
     final got = <String>[];
-    await IncomingText().listen(got.add);
+    await IncomingText().listen((text, _) => got.add(text));
     expect(got, ['Hello from Chrome']);
+  });
+
+  test('preserves the sender’s subject when provided', () async {
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) async => {'text': 'A shared article', 'subject': ' Article title '},
+    );
+    final got = <(String, String?)>[];
+    await IncomingText().listen((text, title) => got.add((text, title)));
+    expect(got, [('A shared article', 'Article title')]);
   });
 
   test('ignores empty or missing text', () async {
@@ -28,8 +38,8 @@ void main() {
     );
     final got = <String>[];
     final incoming = IncomingText();
-    await incoming.listen(got.add);
-    await incoming.listen(got.add);
+    await incoming.listen((text, _) => got.add(text));
+    await incoming.listen((text, _) => got.add(text));
     expect(got, isEmpty);
   });
 
@@ -40,7 +50,7 @@ void main() {
       (_) async => replies.removeAt(0),
     );
     final got = <String>[];
-    await IncomingText().listen(got.add);
+    await IncomingText().listen((text, _) => got.add(text));
     await messenger.handlePlatformMessage(
       channel.name,
       channel.codec.encodeMethodCall(const MethodCall('textAvailable')),

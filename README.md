@@ -17,9 +17,17 @@ NeuroBrew without changing or removing NeuroBrew's reader.
   endpoint, generated as an MP3 to play or export.
 - **A minimal reader:** a plain writing surface (title, text, word count and
   listening time), and while reading, the text itself with the current sentence
-  and spoken word highlighted, scrolling along. A bottom player holds the voice,
-  speed (applies instantly), play/pause and a menu (export, start over, clear).
-  Ctrl/⌘+Enter plays and pauses.
+  and spoken word highlighted, scrolling along. Tap the text or scrub to seek.
+  Jump between paragraphs, choose one from the paragraph list, or skip by
+  time when playing generated audio. Playback speed is remembered.
+- **Saved readings:** choose **Save reading on this device** in the player menu.
+  Open **Saved readings** to resume, rename, or delete a reading.
+- **Delivery hints:** ask OpenAI for suggested pauses, emphasis, slower delivery,
+  or IPA pronunciation. Enable the suggestions you want and apply them to the
+  Kokoro server voice. The request sends your text and uses your own OpenAI key.
+- **Background audio:** generated audio supports the Android media notification
+  and lock-screen controls. Auri's Android text-selection service has its own
+  notification.
 - **Colour themes:** Auri (the default), Violet, Neon, Ocean, Forest, Ember, Rose
   and Graphite. The Auri theme takes its navy, violet and ice blue from the icon.
   Each palette supports System, Light and Dark modes. Every
@@ -81,7 +89,19 @@ background Flutter engine (`ReadAloudService.kt` →
 `lib/features/read_aloud/selection_reader.dart`) runs the same Dart voices as
 the app.
 
-Text shared to Auri (Share) opens the app and reads with the device voice.
+Text shared to Auri (Share) opens the app with the sender's title when available
+and reads with the device voice.
+
+### Player shortcuts
+
+| Key | Action |
+|---|---|
+| Ctrl/⌘+Enter, Space or K | Play or pause |
+| J / L, Left / Right | Skip 10 seconds or 5 seconds |
+| Shift+P / Shift+N, R | Previous / next paragraph or restart the paragraph |
+| Comma / Period | Previous / next sentence |
+| < / > | Slower / faster |
+| Home, 0–9 | Start or jump to a tenth of the reading |
 
 Each mode shows its availability in Settings. Kokoro's is checked by asking the
 server for its voice list, at launch, when Settings opens, on **Check now**, and
@@ -100,9 +120,11 @@ flutter build apk --release --dart-define=KOKORO_URL=https://<your-server>
 ```
 
 Or type the address in Settings. Kokoro reads chunk by chunk, making the next
-chunk while the current one plays, and keeps this session's chunks so pausing
-and resuming doesn't make them again. A reading played through from the start
-can be exported as an MP3.
+chunk while the current one plays. Auri can reuse audio for saved readings
+after an app restart, including cached Kokoro audio when the server is offline.
+Kokoro-FastAPI's captioned endpoint supplies word timings and supports delivery
+hints. Use **Export MP3** or **Share audio** to generate the whole file without
+playing it first.
 
 On web the server must answer CORS preflight requests; a token gate that rejects
 every request without the token (as Synapse's Caddy setup does) blocks the
@@ -169,8 +191,11 @@ No application backend receives your key. On web, a key is present in your
 browser memory and outbound request; never embed a shared production key in a
 public deployment.
 
-Documents and generated audio also remain in memory until explicitly exported.
-Closing/reloading the app loses the draft, the audio, and any key not remembered. Device speech is
+Unsaved drafts and their generated audio stay in memory. Saved readings, enabled
+delivery hints and reading position are stored on this device or in this browser.
+A bounded local cache keeps generated audio for saved readings. Deleting
+a saved reading also removes its cached audio. Closing or reloading loses unsaved
+drafts and unremembered keys. Device speech is
 provided by the OS/browser; some voices use a network service. Install an
 appropriate offline voice to read without a connection.
 
@@ -178,11 +203,13 @@ appropriate offline voice to read without a connection.
 
 - MP3 export needs Kokoro or Other API; device TTS does not produce a portable MP3.
 - Scanned PDFs require OCR elsewhere. DRM-protected EPUBs are not supported.
-- Device resume restarts at the latest word callback (or chunk start if the
-  engine provides no progress). API playback restarts the MP3 after pausing.
+- Device resume restarts at the latest word callback, or at the chunk start if
+  the engine provides no progress. Position in audio that comes without word
+  timings is estimated from the text.
 - MP3 chunks are joined as MPEG audio frames, preserving the original approach
   from NeuroBrew. Some players may show approximate duration/seek behavior.
-- No cloud reading library, background audio service, or account sync.
+- The library and saved places are local to each installation. Android and the
+  browser can reclaim cached audio. The browser cache holds up to 1.5 MB.
 
 ## Provenance
 

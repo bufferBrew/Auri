@@ -2,7 +2,7 @@ package com.bufferbrew.auri
 
 import android.content.Intent
 import android.os.Bundle
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
@@ -15,14 +15,15 @@ import io.flutter.plugin.common.MethodChannel
  * race with engine start-up; while running, `textAvailable` tells Flutter to
  * pull again.
  */
-class MainActivity : FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
     private var channel: MethodChannel? = null
-    private var pendingText: String? = null
+    private var pendingText: Map<String, String?>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         // A recreated activity gets its old intent again; don't replay it.
         if (savedInstanceState == null) pendingText = textFrom(intent)
+        super.onCreate(savedInstanceState)
+        if (pendingText != null) channel?.invokeMethod("textAvailable", null)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -47,7 +48,7 @@ class MainActivity : FlutterActivity() {
         channel?.invokeMethod("textAvailable", null)
     }
 
-    private fun textFrom(intent: Intent?): String? {
+    private fun textFrom(intent: Intent?): Map<String, String?>? {
         val text = when (intent?.action) {
             Intent.ACTION_PROCESS_TEXT ->
                 intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
@@ -55,7 +56,11 @@ class MainActivity : FlutterActivity() {
                 intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
             else -> null
         }
-        return text?.takeIf { it.isNotBlank() }
+        if (text.isNullOrBlank()) return null
+        return mapOf(
+            "text" to text,
+            "subject" to intent?.getStringExtra(Intent.EXTRA_SUBJECT),
+        )
     }
 
     private companion object {
