@@ -2,7 +2,7 @@
 
 # Brew ecosystem — shared agent rules
 
-Rules for every app in the Brew family (bufferBrew GitHub org). They apply to
+Rules for every app in the Brew family (`bufferbrewlabs` GitHub org). They apply to
 any coding agent — Claude Code, Codex, Cursor, Gemini, Copilot — working in
 any Brew repo. App-specific rules live in that repo's own `CLAUDE.md` /
 `AGENTS.md` below the shared block; where the two conflict, the app's own
@@ -39,7 +39,7 @@ schema.
 ## Naming
 
 - Every app has a one-word product name (e.g. Synapse) and sits under one
-  umbrella, Brew: present it as "<Name> · a Brew app", target the `bufferBrew`
+  umbrella, Brew: present it as "<Name> · a Brew app", target the `bufferbrewlabs`
   org, and build on the shared `brew-packages` (code, theme, icon style).
   Apps are being renamed one at a time; older `<Thing>Brew` names stay until
   their turn. No ad-hoc names: agree a new name before using it.
@@ -54,7 +54,7 @@ schema.
 - Stage files by name. No `git add -A` / `git add .`.
 - **Never commit `graphify-out/`** — not even as a separate graph commit. If an
   app's own docs say to commit the graph, flag the conflict instead.
-- Shared Flutter code lives in `bufferBrew/brew-packages`
+- Shared Flutter code lives in `bufferbrewlabs/brew-packages`
   (`~/Desktop/code/bufferbrew/brewapps/packages`, a pub workspace). Only schema-agnostic
   client code belongs there — HTTP/LLM provider dispatch, Supabase bootstrap,
   auth helpers — never a repository class tied to one app's tables.
@@ -64,7 +64,7 @@ schema.
   name: brew_auth/brew_ui reach brew_core by an in-repo path, which pub records
   as the SHA, and a tag-name ref then counts as a different source and fails
   to resolve. Get the SHA with
-  `git ls-remote https://github.com/bufferBrew/brew-packages.git 'refs/tags/vX.Y.Z^{}'`.
+  `git ls-remote https://github.com/bufferbrewlabs/brew-packages.git 'refs/tags/vX.Y.Z^{}'`.
   To develop against a local checkout, add a git-ignored
   `pubspec_overrides.yaml` pointing at `../packages/<pkg>` — only
   while you're editing the package. It rewrites `pubspec.lock` to a `path:`
