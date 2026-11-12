@@ -214,7 +214,7 @@ appropriate offline voice to read without a connection.
 ## Provenance
 
 Document parsing, text chunking, MP3 joining, and theme tokens are adapted from
-[bufferBrew/NeuroBrew](https://github.com/bufferBrew/NeuroBrew).
+[bufferBrew/NeuroBrew](https://github.com/bufferbrewlabs/NeuroBrew).
 This repository starts with new history and includes no original environment
 files, deployment configuration, credentials, or user documents.
 
